@@ -19,7 +19,10 @@ import JSON5 from "json5";
 import Twilio from "twilio";
 import type { MessageInstance } from "twilio/lib/rest/api/v2010/account/message.js";
 import { z } from "zod";
-
+import { sendCommand } from "./commands/send.js";
+import { statusCommand } from "./commands/status.js";
+import { upCommand } from "./commands/up.js";
+import { webhookCommand } from "./commands/webhook.js";
 import {
 	danger,
 	info,
@@ -37,10 +40,7 @@ import {
 	sendMessageWeb,
 	webAuthExists,
 } from "./provider-web.js";
-import { sendCommand } from "./commands/send.js";
-import { statusCommand } from "./commands/status.js";
-import { webhookCommand } from "./commands/webhook.js";
-import { upCommand } from "./commands/up.js";
+import type { Provider } from "./utils.js";
 import {
 	assertProvider,
 	CONFIG_DIR,
@@ -49,7 +49,6 @@ import {
 	sleep,
 	withWhatsAppPrefix,
 } from "./utils.js";
-import type { Provider } from "./utils.js";
 
 dotenv.config({ quiet: true });
 
@@ -227,7 +226,10 @@ const EnvSchema = z
 				message: "TWILIO_API_KEY required when TWILIO_API_SECRET is set",
 			});
 		}
-		if (!val.TWILIO_AUTH_TOKEN && !(val.TWILIO_API_KEY && val.TWILIO_API_SECRET)) {
+		if (
+			!val.TWILIO_AUTH_TOKEN &&
+			!(val.TWILIO_API_KEY && val.TWILIO_API_SECRET)
+		) {
 			ctx.addIssue({
 				code: "custom",
 				message:
@@ -241,7 +243,9 @@ function readEnv(runtime: RuntimeEnv = defaultRuntime): EnvConfig {
 	const parsed = EnvSchema.safeParse(process.env);
 	if (!parsed.success) {
 		runtime.error("Invalid environment configuration:");
-		parsed.error.issues.forEach((iss) => runtime.error(`- ${iss.message}`));
+		parsed.error.issues.forEach((iss) => {
+			runtime.error(`- ${iss.message}`);
+		});
 		runtime.exit(1);
 	}
 
@@ -254,10 +258,16 @@ function readEnv(runtime: RuntimeEnv = defaultRuntime): EnvConfig {
 		TWILIO_API_SECRET: apiSecret,
 	} = parsed.data;
 
-	const auth: AuthMode =
-		apiKey && apiSecret
-			? { accountSid, apiKey, apiSecret }
-			: { accountSid, authToken: authToken! };
+	let auth: AuthMode;
+	if (apiKey && apiSecret) {
+		auth = { accountSid, apiKey, apiSecret };
+	} else if (authToken) {
+		auth = { accountSid, authToken };
+	} else {
+		runtime.error("Missing Twilio auth configuration");
+		runtime.exit(1);
+		throw new Error("unreachable");
+	}
 
 	return {
 		accountSid,
@@ -544,7 +554,8 @@ const DEFAULT_IDLE_MINUTES = 60;
 
 function resolveStorePath(store?: string) {
 	if (!store) return SESSION_STORE_DEFAULT;
-	if (store.startsWith("~")) return path.resolve(store.replace("~", os.homedir()));
+	if (store.startsWith("~"))
+		return path.resolve(store.replace("~", os.homedir()));
 	return path.resolve(store);
 }
 
@@ -561,9 +572,16 @@ function loadSessionStore(storePath: string): Record<string, SessionEntry> {
 	return {};
 }
 
-async function saveSessionStore(storePath: string, store: Record<string, SessionEntry>) {
+async function saveSessionStore(
+	storePath: string,
+	store: Record<string, SessionEntry>,
+) {
 	await fs.promises.mkdir(path.dirname(storePath), { recursive: true });
-	await fs.promises.writeFile(storePath, JSON.stringify(store, null, 2), "utf-8");
+	await fs.promises.writeFile(
+		storePath,
+		JSON.stringify(store, null, 2),
+		"utf-8",
+	);
 }
 
 function deriveSessionKey(scope: SessionScope, ctx: MsgContext) {
@@ -592,11 +610,13 @@ async function getReplyFromConfig(
 
 	// Optional session handling (conversation reuse + /new resets)
 	const sessionCfg = reply?.session;
-	const resetTriggers =
-		sessionCfg?.resetTriggers?.length
-			? sessionCfg.resetTriggers
-			: [DEFAULT_RESET_TRIGGER];
-	const idleMinutes = Math.max(sessionCfg?.idleMinutes ?? DEFAULT_IDLE_MINUTES, 1);
+	const resetTriggers = sessionCfg?.resetTriggers?.length
+		? sessionCfg.resetTriggers
+		: [DEFAULT_RESET_TRIGGER];
+	const idleMinutes = Math.max(
+		sessionCfg?.idleMinutes ?? DEFAULT_IDLE_MINUTES,
+		1,
+	);
 	const sessionScope = sessionCfg?.scope ?? "per-sender";
 	const storePath = resolveStorePath(sessionCfg?.store);
 
@@ -651,7 +671,7 @@ async function getReplyFromConfig(
 		: "";
 	const prefixedBody = bodyPrefix
 		? `${bodyPrefix}${sessionCtx.BodyStripped ?? sessionCtx.Body ?? ""}`
-		: sessionCtx.BodyStripped ?? sessionCtx.Body;
+		: (sessionCtx.BodyStripped ?? sessionCtx.Body);
 	const templatingCtx: TemplateContext = {
 		...sessionCtx,
 		Body: prefixedBody,
@@ -692,13 +712,15 @@ async function getReplyFromConfig(
 
 		// Inject session args if configured (use resume for existing, session-id for new)
 		if (reply.session) {
-			const sessionArgList = (isNewSession
-				? reply.session.sessionArgNew ?? ["--session-id", "{{SessionId}}"]
-				: reply.session.sessionArgResume ?? ["--resume", "{{SessionId}}"]
+			const sessionArgList = (
+				isNewSession
+					? (reply.session.sessionArgNew ?? ["--session-id", "{{SessionId}}"])
+					: (reply.session.sessionArgResume ?? ["--resume", "{{SessionId}}"])
 			).map((part) => applyTemplate(part, templatingCtx));
 			if (sessionArgList.length) {
 				const insertBeforeBody = reply.session.sessionArgBeforeBody ?? true;
-				const insertAt = insertBeforeBody && argv.length > 1 ? argv.length - 1 : argv.length;
+				const insertAt =
+					insertBeforeBody && argv.length > 1 ? argv.length - 1 : argv.length;
 				argv = [
 					...argv.slice(0, insertAt),
 					...sessionArgList,
@@ -710,8 +732,10 @@ async function getReplyFromConfig(
 		logVerbose(`Running command auto-reply: ${finalArgv.join(" ")}`);
 		const started = Date.now();
 		try {
-			const { stdout, stderr, code, signal, killed } =
-				await commandRunner(finalArgv, timeoutMs);
+			const { stdout, stderr, code, signal, killed } = await commandRunner(
+				finalArgv,
+				timeoutMs,
+			);
 			const trimmed = stdout.trim();
 			if (stderr?.trim()) {
 				logVerbose(`Command auto-reply stderr: ${stderr.trim()}`);
@@ -784,10 +808,10 @@ async function autoReplyIfConfigured(
 	const replyFrom = message.to;
 	const replyTo = message.from;
 	if (!replyFrom || !replyTo) {
-	if (isVerbose())
-		console.error(
-			"Skipping auto-reply: missing to/from on inbound message",
-			ctx,
+		if (isVerbose())
+			console.error(
+				"Skipping auto-reply: missing to/from on inbound message",
+				ctx,
 			);
 		return;
 	}
@@ -891,7 +915,7 @@ async function sendMessage(
 		const msg =
 			typeof anyErr?.message === "string"
 				? anyErr.message
-			: (anyErr?.message ?? err);
+				: (anyErr?.message ?? err);
 		const more = anyErr?.moreInfo;
 		runtime.error(
 			`❌ Twilio send failed${code ? ` (code ${code})` : ""}${status ? ` status ${status}` : ""}: ${msg}`,
@@ -1186,9 +1210,9 @@ async function ensureFunnel(
 			"Failed to enable Tailscale Funnel. Is it allowed on your tailnet?",
 		);
 		runtime.error(
-					info(
-						"Tip: you can fall back to polling (no webhooks needed): `pnpm warelay relay --provider twilio --interval 5 --lookback 10`",
-					),
+			info(
+				"Tip: you can fall back to polling (no webhooks needed): `pnpm warelay relay --provider twilio --interval 5 --lookback 10`",
+			),
 		);
 		if (isVerbose()) {
 			if (stdout.trim()) runtime.error(chalk.gray(`stdout: ${stdout.trim()}`));
@@ -1499,7 +1523,9 @@ function ensureTwilioEnv(runtime: RuntimeEnv = defaultRuntime) {
 	const required = ["TWILIO_ACCOUNT_SID", "TWILIO_WHATSAPP_FROM"];
 	const missing = required.filter((k) => !process.env[k]);
 	const hasToken = Boolean(process.env.TWILIO_AUTH_TOKEN);
-	const hasKey = Boolean(process.env.TWILIO_API_KEY && process.env.TWILIO_API_SECRET);
+	const hasKey = Boolean(
+		process.env.TWILIO_API_KEY && process.env.TWILIO_API_SECRET,
+	);
 	if (missing.length > 0 || (!hasToken && !hasKey)) {
 		runtime.error(
 			danger(
@@ -1618,7 +1644,9 @@ async function monitorWebProvider(
 				}
 			} catch (err) {
 				console.error(
-					danger(`Failed sending web auto-reply to ${msg.from}: ${String(err)}`),
+					danger(
+						`Failed sending web auto-reply to ${msg.from}: ${String(err)}`,
+					),
 				);
 			}
 		},
@@ -1650,8 +1678,8 @@ async function performSend(
 		provider: Provider;
 	},
 	deps: CliDeps,
-	exitFn: (code: number) => never = defaultRuntime.exit,
-	runtime: RuntimeEnv = defaultRuntime,
+	_exitFn: (code: number) => never = defaultRuntime.exit,
+	_runtime: RuntimeEnv = defaultRuntime,
 ) {
 	deps.assertProvider(opts.provider);
 	const waitSeconds = Number.parseInt(opts.wait, 10);
@@ -1686,8 +1714,8 @@ async function performSend(
 async function performStatus(
 	opts: { limit: string; lookback: string; json?: boolean },
 	deps: CliDeps,
-	exitFn: (code: number) => never = defaultRuntime.exit,
-	runtime: RuntimeEnv = defaultRuntime,
+	_exitFn: (code: number) => never = defaultRuntime.exit,
+	_runtime: RuntimeEnv = defaultRuntime,
 ) {
 	const limit = Number.parseInt(opts.limit, 10);
 	const lookbackMinutes = Number.parseInt(opts.lookback, 10);
@@ -1720,8 +1748,8 @@ async function performWebhookSetup(
 		verbose?: boolean;
 	},
 	deps: CliDeps,
-	exitFn: (code: number) => never = defaultRuntime.exit,
-	runtime: RuntimeEnv = defaultRuntime,
+	_exitFn: (code: number) => never = defaultRuntime.exit,
+	_runtime: RuntimeEnv = defaultRuntime,
 ) {
 	const port = Number.parseInt(opts.port, 10);
 	if (Number.isNaN(port) || port <= 0 || port >= 65536) {
@@ -1746,8 +1774,8 @@ async function performUp(
 		yes?: boolean;
 	},
 	deps: CliDeps,
-	exitFn: (code: number) => never = defaultRuntime.exit,
-	runtime: RuntimeEnv = defaultRuntime,
+	_exitFn: (code: number) => never = defaultRuntime.exit,
+	_runtime: RuntimeEnv = defaultRuntime,
 ) {
 	const port = Number.parseInt(opts.port, 10);
 	if (Number.isNaN(port) || port <= 0 || port >= 65536) {
@@ -1932,7 +1960,11 @@ program
 	.description("Auto-reply to inbound messages (auto-selects web or twilio)")
 	.option("--provider <provider>", "auto | web | twilio", "auto")
 	.option("-i, --interval <seconds>", "Polling interval for twilio mode", "5")
-	.option("-l, --lookback <minutes>", "Initial lookback window for twilio mode", "5")
+	.option(
+		"-l, --lookback <minutes>",
+		"Initial lookback window for twilio mode",
+		"5",
+	)
 	.option("--verbose", "Verbose logging", false)
 	.addHelpText(
 		"after",
@@ -1971,7 +2003,9 @@ Examples:
 				return;
 			} catch (err) {
 				if (providerPref === "auto") {
-					defaultRuntime.error(warn("Web session unavailable; falling back to twilio."));
+					defaultRuntime.error(
+						warn("Web session unavailable; falling back to twilio."),
+					);
 				} else {
 					defaultRuntime.error(danger(`Web relay failed: ${String(err)}`));
 					defaultRuntime.exit(1);
@@ -2127,7 +2161,7 @@ export {
 	uniqueBySid,
 	waitForFinalStatus,
 	waitForever,
-	toWhatsappJid,
+	type toWhatsappJid,
 	program,
 };
 
