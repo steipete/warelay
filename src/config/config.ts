@@ -19,7 +19,13 @@ export type SessionConfig = {
 	sessionArgBeforeBody?: boolean;
 };
 
+export type LoggingConfig = {
+	level?: "silent" | "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+	file?: string;
+};
+
 export type WarelayConfig = {
+	logging?: LoggingConfig;
 	inbound?: {
 		allowFrom?: string[]; // E.164 numbers allowed to trigger auto-reply (without whatsapp:)
 		reply?: {
@@ -80,6 +86,22 @@ const ReplySchema = z
 	);
 
 const WarelaySchema = z.object({
+	logging: z
+		.object({
+			level: z
+				.union([
+					z.literal("silent"),
+					z.literal("fatal"),
+					z.literal("error"),
+					z.literal("warn"),
+					z.literal("info"),
+					z.literal("debug"),
+					z.literal("trace"),
+				])
+				.optional(),
+			file: z.string().optional(),
+		})
+		.optional(),
 	inbound: z
 		.object({
 			allowFrom: z.array(z.string()).optional(),

@@ -91,6 +91,19 @@ Best practice: use a dedicated WhatsApp account (separate SIM/eSIM or business a
 }
 ```
 
+### Logging (optional)
+- File logs are written to `/tmp/warelay/warelay.log` by default. Levels: `silent | fatal | error | warn | info | debug | trace` (CLI `--verbose` forces `debug`). Web-provider inbound/outbound entries include message bodies and auto-reply text for easier auditing.
+- Override in `~/.warelay/warelay.json`:
+
+```json5
+{
+  logging: {
+    level: "warn",
+    file: "/tmp/warelay/custom.log"
+  }
+}
+```
+
 ### Claude CLI setup (how we run it)
 1) Install the official Claude CLI (e.g., `brew install anthropic-ai/cli/claude` or follow the Anthropic docs) and run `claude login` so it can read your API key.
 2) In `warelay.json`, set `reply.mode` to `"command"` and point `command[0]` to `"claude"`; set `claudeOutputFormat` to `"text"` (or `"json"`/`"stream-json"` if you want warelay to parse and trim the JSON output).
@@ -131,7 +144,7 @@ Templating tokens: `{{Body}}`, `{{BodyStripped}}`, `{{From}}`, `{{To}}`, `{{Mess
 
 ## FAQ & Safety
 - Twilio errors: **63016 “permission to send an SMS has not been enabled”** → ensure your number is WhatsApp-enabled; **63007 template not approved** → send a free-form session message within 24h or use an approved template; **63112 policy violation** → adjust content, shorten to <1600 chars, avoid links that trigger spam filters. Re-run `pnpm warelay status` to see the exact Twilio response body.
-- Does this store my messages? warelay only writes `~/.warelay/warelay.json` (config), `~/.warelay/credentials/` (WhatsApp Web auth), and `~/.warelay/sessions.json` (session IDs + timestamps). It does **not** persist message bodies beyond the session store. Logs print to stdout/stderr; redirect or rotate if needed.
+- Does this store my messages? warelay only writes `~/.warelay/warelay.json` (config), `~/.warelay/credentials/` (WhatsApp Web auth), and `~/.warelay/sessions.json` (session IDs + timestamps). It does **not** persist message bodies beyond the session store. Logs stream to stdout/stderr and also `/tmp/warelay/warelay.log` (configurable via `logging.file`).
 - Personal WhatsApp safety: Automation on personal accounts can be rate-limited or logged out by WhatsApp. Use `--provider web` sparingly, keep messages human-like, and re-run `login` if the session is dropped.
 - Limits to remember: WhatsApp text limit ~1600 chars; avoid rapid bursts—space sends by a few seconds; keep webhook replies under a couple seconds for good UX; command auto-replies time out after 600s by default.
 - Deploy / keep running: Use `tmux` or `screen` for ad-hoc (`tmux new -s warelay -- pnpm warelay relay --provider twilio`). For long-running hosts, wrap `pnpm warelay relay ...` or `pnpm warelay webhook --ingress tailscale ...` in a systemd service or macOS LaunchAgent; ensure environment variables are loaded in that context.

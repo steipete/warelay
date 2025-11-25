@@ -1,5 +1,8 @@
+import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import fsSync from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockBaileysSocket } from "../test/mocks/baileys.js";
 import { createMockBaileys } from "../test/mocks/baileys.js";
@@ -39,6 +42,7 @@ vi.mock("qrcode-terminal", () => ({
 }));
 
 import { monitorWebProvider } from "./index.js";
+import { resetLogger, setLoggerOverride } from "./logging.js";
 import {
 	createWaSocket,
 	loginWeb,
@@ -78,6 +82,8 @@ describe("provider-web", () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+		resetLogger();
+		setLoggerOverride(null);
 	});
 
 	it("creates WA socket with QR handler", async () => {
@@ -230,6 +236,37 @@ describe("provider-web", () => {
 		await listener.close();
 	});
 
+	it("monitorWebInbox logs inbound bodies to file", async () => {
+		const logPath = path.join(
+			os.tmpdir(),
+			`warelay-log-test-${crypto.randomUUID()}.log`,
+		);
+		setLoggerOverride({ level: "trace", file: logPath });
+
+		const onMessage = vi.fn();
+		const listener = await monitorWebInbox({ verbose: false, onMessage });
+		const sock = getLastSocket();
+		const upsert = {
+			type: "notify",
+			messages: [
+				{
+					key: { id: "abc", fromMe: false, remoteJid: "999@s.whatsapp.net" },
+					message: { conversation: "ping" },
+					messageTimestamp: 1_700_000_000,
+					pushName: "Tester",
+				},
+			],
+		};
+
+		sock.ev.emit("messages.upsert", upsert);
+		await new Promise((resolve) => setImmediate(resolve));
+
+		const content = fsSync.readFileSync(logPath, "utf-8");
+		expect(content).toContain('"module":"web-inbound"');
+		expect(content).toContain('"body":"ping"');
+		await listener.close();
+	});
+
 	it("monitorWebInbox includes participant when marking group messages read", async () => {
 		const onMessage = vi.fn();
 		const listener = await monitorWebInbox({ verbose: false, onMessage });
@@ -308,6 +345,44 @@ describe("provider-web", () => {
 		expect(sendMedia).toHaveBeenCalled();
 		expect(reply).toHaveBeenCalledWith("hi");
 		fetchMock.mockRestore();
+	});
+
+	it("logs outbound replies to file", async () => {
+		const logPath = path.join(
+			os.tmpdir(),
+			`warelay-log-test-${crypto.randomUUID()}.log`,
+		);
+		setLoggerOverride({ level: "trace", file: logPath });
+
+		let capturedOnMessage:
+			| ((msg: import("./provider-web.js").WebInboundMessage) => Promise<void>)
+			| undefined;
+		const listenerFactory = async (opts: {
+			onMessage: (
+				msg: import("./provider-web.js").WebInboundMessage,
+			) => Promise<void>;
+		}) => {
+			capturedOnMessage = opts.onMessage;
+			return { close: vi.fn() };
+		};
+
+		const resolver = vi.fn().mockResolvedValue({ text: "auto" });
+		await monitorWebProvider(false, listenerFactory, false, resolver);
+		expect(capturedOnMessage).toBeDefined();
+
+		await capturedOnMessage?.({
+			body: "hello",
+			from: "+1",
+			to: "+2",
+			id: "msg1",
+			sendComposing: vi.fn(),
+			reply: vi.fn(),
+			sendMedia: vi.fn(),
+		});
+
+		const content = fsSync.readFileSync(logPath, "utf-8");
+		expect(content).toContain('"module":"web-auto-reply"');
+		expect(content).toContain('"text":"auto"');
 	});
 
 	it("logWebSelfId prints cached E.164 when creds exist", () => {

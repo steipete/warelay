@@ -1,9 +1,10 @@
 # Changelog
 
-## [Unreleased] 0.1.3
+## 0.1.3 — 2025-11-25
 
 ### Features
 - Added `cwd` option to command reply config for setting the working directory where commands execute. Essential for Claude Code to have proper project context.
+- Added configurable file-based logging (default `/tmp/warelay/warelay.log`) with log level set via `logging.level` in `~/.warelay/warelay.json`; verbose still forces debug.
 
 ### Developer notes
 - Command auto-replies now pass `{ timeoutMs, cwd }` into the command runner; custom runners/tests that stub `runCommandWithTimeout` should accept the options object as well as the legacy numeric timeout.

@@ -13,12 +13,12 @@ import {
 	useMultiFileAuthState,
 	type WAMessage,
 } from "@whiskeysockets/baileys";
-import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { getReplyFromConfig } from "./auto-reply/reply.js";
 import { waitForever } from "./cli/wait.js";
 import { danger, info, isVerbose, logVerbose, success } from "./globals.js";
 import { logInfo } from "./logger.js";
+import { getChildLogger } from "./logging.js";
 import { saveMediaBuffer } from "./media/store.js";
 import { defaultRuntime, type RuntimeEnv } from "./runtime.js";
 import type { Provider } from "./utils.js";
@@ -31,7 +31,12 @@ function formatDuration(ms: number) {
 const WA_WEB_AUTH_DIR = path.join(os.homedir(), ".warelay", "credentials");
 
 export async function createWaSocket(printQr: boolean, verbose: boolean) {
-	const logger = pino({ level: verbose ? "info" : "silent" });
+	const logger = getChildLogger(
+		{ module: "baileys" },
+		{
+			level: verbose ? "info" : "silent",
+		},
+	);
 	// Some Baileys internals call logger.trace even when silent; ensure it's present.
 	const loggerAny = logger as unknown as Record<string, unknown>;
 	if (typeof loggerAny.trace !== "function") {
@@ -48,7 +53,7 @@ export async function createWaSocket(printQr: boolean, verbose: boolean) {
 		version,
 		logger,
 		printQRInTerminal: false,
-		browser: ["warelay", "cli", "0.1.2"],
+		browser: ["warelay", "cli", "0.1.3"],
 		syncFullHistory: false,
 		markOnlineOnConnect: false,
 	});
@@ -246,6 +251,7 @@ export async function monitorWebInbox(options: {
 	verbose: boolean;
 	onMessage: (msg: WebInboundMessage) => Promise<void>;
 }) {
+	const inboundLogger = getChildLogger({ module: "web-inbound" });
 	const sock = await createWaSocket(false, options.verbose);
 	await waitForWaConnection(sock);
 	try {
@@ -333,6 +339,17 @@ export async function monitorWebInbox(options: {
 			const timestamp = msg.messageTimestamp
 				? Number(msg.messageTimestamp) * 1000
 				: undefined;
+			inboundLogger.info(
+				{
+					from,
+					to: selfE164 ?? "me",
+					body,
+					mediaPath,
+					mediaType,
+					timestamp,
+				},
+				"inbound message",
+			);
 			try {
 				await options.onMessage({
 					id,
@@ -373,6 +390,7 @@ export async function monitorWebProvider(
 	replyResolver: typeof getReplyFromConfig = getReplyFromConfig,
 	runtime: RuntimeEnv = defaultRuntime,
 ) {
+	const replyLogger = getChildLogger({ module: "web-auto-reply" });
 	// Listen for inbound personal WhatsApp Web messages and auto-reply if configured.
 	const listener = await listenerFactory({
 		verbose,
@@ -420,6 +438,17 @@ export async function monitorWebProvider(
 							`✅ Sent web media reply to ${msg.from} (${(media.buffer.length / (1024 * 1024)).toFixed(2)}MB)`,
 							runtime,
 						);
+						replyLogger.info(
+							{
+								to: msg.from,
+								from: msg.to,
+								text: replyResult.text ?? null,
+								mediaUrl: replyResult.mediaUrl,
+								mediaSizeBytes: media.buffer.length,
+								durationMs: Date.now() - replyStarted,
+							},
+							"auto-reply sent (media)",
+						);
 					} catch (err) {
 						console.error(
 							danger(`Failed sending web media to ${msg.from}: ${String(err)}`),
@@ -429,6 +458,17 @@ export async function monitorWebProvider(
 							logInfo(
 								`⚠️  Media skipped; sent text-only to ${msg.from}`,
 								runtime,
+							);
+							replyLogger.info(
+								{
+									to: msg.from,
+									from: msg.to,
+									text: replyResult.text,
+									mediaUrl: replyResult.mediaUrl,
+									durationMs: Date.now() - replyStarted,
+									mediaSendFailed: true,
+								},
+								"auto-reply sent (text fallback)",
 							);
 						}
 					}
@@ -449,6 +489,16 @@ export async function monitorWebProvider(
 						),
 					);
 				}
+				replyLogger.info(
+					{
+						to: msg.from,
+						from: msg.to,
+						text: replyResult.text ?? null,
+						mediaUrl: replyResult.mediaUrl,
+						durationMs,
+					},
+					"auto-reply sent",
+				);
 			} catch (err) {
 				console.error(
 					danger(
