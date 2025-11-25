@@ -309,7 +309,7 @@ export async function getReplyFromConfig(
 					`Command auto-reply timed out after ${elapsed}ms (limit ${timeoutMs}ms)`,
 				);
 			} else {
-				console.error(`Command auto-reply failed after ${elapsed}ms`, err);
+				logError("Command auto-reply failed after ms: " . String(err), runtime);
 			}
 			return undefined;
 		}

@@ -75,9 +75,10 @@ describe("provider-web", () => {
 			expect.objectContaining({ printQRInTerminal: false }),
 		);
 		const passed = makeWASocket.mock.calls[0][0];
-		expect((passed as { logger?: { level?: string } }).logger?.level).toBe(
-			"silent",
-		);
+		const passedLogger = (passed as { logger?: { level?: string; trace?: unknown } })
+			.logger;
+		expect(passedLogger?.level).toBe("silent");
+		expect(typeof passedLogger?.trace).toBe("function");
 		const sock = getLastSocket();
 		const saveCreds = (
 			await baileys.useMultiFileAuthState.mock.results[0].value

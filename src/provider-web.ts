@@ -23,18 +23,11 @@ import { logInfo, logWarn } from "./logger.js";
 const WA_WEB_AUTH_DIR = path.join(os.homedir(), ".warelay", "credentials");
 
 export async function createWaSocket(printQr: boolean, verbose: boolean) {
-	const logger = verbose
-		? pino({ level: "info" })
-		: ({
-				level: "silent",
-				child: () => ({}) as pino.Logger,
-				trace: () => {},
-				debug: () => {},
-				info: () => {},
-				warn: () => {},
-				error: () => {},
-				fatal: () => {},
-			} satisfies Partial<pino.Logger>) as pino.Logger;
+	const logger = pino({ level: verbose ? "info" : "silent" });
+	// Some Baileys internals call logger.trace even when silent; ensure it's present.
+	if (typeof (logger as Record<string, unknown>).trace !== "function") {
+		(logger as unknown as { trace: () => void }).trace = () => {};
+	}
 	await ensureDir(WA_WEB_AUTH_DIR);
 	const { state, saveCreds } = await useMultiFileAuthState(WA_WEB_AUTH_DIR);
 	const { version } = await fetchLatestBaileysVersion();
