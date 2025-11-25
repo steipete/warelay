@@ -3,7 +3,7 @@
 ## 0.1.0 — 2025-11-25
 
 ### CLI & Providers
-- Bundles a single `warelay` CLI with commands for `send`, `relay`, `status`, `webhook`, `up`, `login`, and tmux helpers `relay:tmux` / `relay:tmux:attach` (see `src/cli/program.ts`).
+- Bundles a single `warelay` CLI with commands for `send`, `relay`, `status`, `webhook`, `up`, `login`, and tmux helpers `relay:tmux` / `relay:tmux:attach` (see `src/cli/program.ts`); `webhook` now accepts `--ingress tailscale|none` with `up` as an alias for the Tailscale path.
 - Supports two messaging backends: **Twilio** (default) and **personal WhatsApp Web**; `relay --provider auto` selects Web when a cached login exists, otherwise falls back to Twilio polling (`provider-web.ts`, `cli/program.ts`).
 - `send` can target either provider, optionally wait for delivery status (Twilio only), output JSON, dry-run payloads, and attach media (`commands/send.ts`).
 - `status` merges inbound + outbound Twilio traffic with formatted lines or JSON output (`commands/status.ts`, `twilio/messages.ts`).

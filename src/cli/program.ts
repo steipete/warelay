@@ -173,11 +173,16 @@ Examples:
 	program
 		.command("webhook")
 		.description(
-			"Run a local webhook server for inbound WhatsApp (works with Tailscale/port forward)",
+			"Run inbound webhook. ingress=tailscale updates Twilio; ingress=none stays local-only.",
 		)
 		.option("-p, --port <port>", "Port to listen on", "42873")
 		.option("-r, --reply <text>", "Optional auto-reply text")
 		.option("--path <path>", "Webhook path", "/webhook/whatsapp")
+		.option(
+			"--ingress <mode>",
+			"Ingress: tailscale (funnel + Twilio update) | none (local only)",
+			"tailscale",
+		)
 		.option("--verbose", "Log inbound and auto-replies", false)
 		.option("-y, --yes", "Auto-confirm prompts when possible", false)
 		.option("--dry-run", "Print planned actions without starting server", false)
@@ -185,13 +190,10 @@ Examples:
 			"after",
 			`
 Examples:
-  warelay webhook                       # listen on 42873
+  warelay webhook                       # ingress=tailscale (funnel + Twilio update)
+  warelay webhook --ingress none        # local-only server (no funnel / no Twilio update)
   warelay webhook --port 45000          # pick a high, less-colliding port
-  warelay webhook --reply "Got it!"     # static auto-reply; otherwise use config file
-
-With Tailscale:
-  tailscale serve tcp 42873 127.0.0.1:42873
-  (then set Twilio webhook URL to your tailnet IP:42873/webhook/whatsapp)`,
+  warelay webhook --reply "Got it!"     # static auto-reply; otherwise use config file`,
 		)
 		// istanbul ignore next
 		.action(async (opts) => {
@@ -222,7 +224,7 @@ With Tailscale:
 	program
 		.command("up")
 		.description(
-			"Bring up webhook + Tailscale Funnel + Twilio callback (default webhook mode)",
+			"Alias: webhook --ingress tailscale (Funnel + Twilio callback)",
 		)
 		.option("-p, --port <port>", "Port to listen on", "42873")
 		.option("--path <path>", "Webhook path", "/webhook/whatsapp")

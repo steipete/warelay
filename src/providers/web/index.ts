@@ -1,12 +1,12 @@
 export {
 	createWaSocket,
+	waitForWaConnection,
+	sendMessageWeb,
 	loginWeb,
-	logWebSelfId,
 	monitorWebInbox,
 	monitorWebProvider,
-	pickProvider,
-	sendMessageWeb,
-	WA_WEB_AUTH_DIR,
-	waitForWaConnection,
 	webAuthExists,
+	logWebSelfId,
+	pickProvider,
+	WA_WEB_AUTH_DIR,
 } from "../../provider-web.js";
