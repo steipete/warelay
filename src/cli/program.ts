@@ -21,7 +21,7 @@ export function buildProgram() {
 	program
 		.name("warelay")
 		.description("WhatsApp relay CLI (Twilio or WhatsApp Web session)")
-		.version("1.0.0");
+		.version("0.1.0");
 
 	program
 		.command("login")

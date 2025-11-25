@@ -5,9 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "warelay": "dist/index.js",
-    "warely": "dist/index.js",
-    "wa": "dist/index.js"
+    "warelay": "bin/warelay.js",
+    "warely": "bin/warelay.js",
+    "wa": "bin/warelay.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
