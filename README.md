@@ -49,7 +49,7 @@ Install from npm (global): `npm install -g warelay` (Node 22+). Then choose **on
 ### Sending images
 - Twilio: `warelay send --to +1... --message "Hi" --media ./pic.jpg --serve-media` (needs `warelay webhook --ingress tailscale` or `--serve-media` to auto-host via Funnel; max 5 MB).
 - Web: `warelay send --provider web --media ./pic.jpg --message "Hi"` (local path or URL; no hosting needed).
-- Auto-replies can attach `mediaUrl` in `~/.warelay/warelay.json` (used alongside `text` when present).
+- Auto-replies can attach `mediaUrl` in `~/.warelay/warelay.json` (used alongside `text` when present). Web auto-replies now auto-resize/recompress images and cap size by config: set `inbound.reply.mediaMaxMb` (default 5) to control the post-compression limit; images are resized (max side 2048px) and JPEG-compressed to fit.
 
 ## Providers
 - **Twilio (default):** needs `.env` creds + WhatsApp-enabled number; supports delivery tracking, polling, webhooks, and auto-reply typing indicators.
