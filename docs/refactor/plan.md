@@ -16,6 +16,7 @@ This is a living note capturing the cleanups underway to keep `warelay` small an
 - README updated to document direct WhatsApp Web support and Claude output handling.
 - Added zod validation for `~/.warelay/warelay.json` and a `--dry-run` flag for `send`.
 - Introduced a tiny logger (`src/logger.ts`) and backoff retry in Twilio polling.
+- Added `--json` for `send`, logger adoption for web/twilio sends, and retries for webhook bring-up.
 
 ## In this pass
 - Wire more modules to the logger; keep colors/verbosity consistent.

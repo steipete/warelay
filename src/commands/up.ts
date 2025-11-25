@@ -1,6 +1,7 @@
 import type { CliDeps } from "../cli/deps.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { waitForever as defaultWaitForever } from "../cli/wait.js";
+import { retryAsync } from "../infra/retry.js";
 
 export async function upCommand(
 	opts: { port: string; path: string; verbose?: boolean; yes?: boolean; dryRun?: boolean },
@@ -23,17 +24,22 @@ export async function upCommand(
 		return { server: undefined, publicUrl, senderSid: undefined, waiter };
 	}
 	await deps.ensureBinary("tailscale", undefined, runtime);
-	await deps.ensureFunnel(port, undefined, runtime);
+	await retryAsync(() => deps.ensureFunnel(port, undefined, runtime), 3, 500);
 	const host = await deps.getTailnetHostname();
 	const publicUrl = `https://${host}${opts.path}`;
 	runtime.log(`🌐 Public webhook URL (via Funnel): ${publicUrl}`);
 
-	const server = await deps.startWebhook(
-		port,
-		opts.path,
-		undefined,
-		Boolean(opts.verbose),
-		runtime,
+	const server = await retryAsync(
+		() =>
+			deps.startWebhook(
+				port,
+				opts.path,
+				undefined,
+				Boolean(opts.verbose),
+				runtime,
+			),
+		3,
+		300,
 	);
 
 	if (!deps.createClient) {

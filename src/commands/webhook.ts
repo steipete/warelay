@@ -1,5 +1,6 @@
 import type { CliDeps } from "../cli/deps.js";
 import type { RuntimeEnv } from "../runtime.js";
+import { retryAsync } from "../infra/retry.js";
 
 export async function webhookCommand(
 	opts: {
@@ -21,12 +22,17 @@ export async function webhookCommand(
 		runtime.log(`[dry-run] would start webhook on port ${port} path ${opts.path}`);
 		return undefined;
 	}
-	const server = await deps.startWebhook(
-		port,
-		opts.path,
-		opts.reply,
-		Boolean(opts.verbose),
-		runtime,
+	const server = await retryAsync(
+		() =>
+			deps.startWebhook(
+				port,
+				opts.path,
+				opts.reply,
+				Boolean(opts.verbose),
+				runtime,
+			),
+		3,
+		300,
 	);
 	return server;
 }

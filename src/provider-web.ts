@@ -364,14 +364,20 @@ function readWebSelfId() {
 	}
 }
 
-export function logWebSelfId(runtime: RuntimeEnv = defaultRuntime) {
+export function logWebSelfId(
+	runtime: RuntimeEnv = defaultRuntime,
+	includeProviderPrefix = false,
+) {
 	// Human-friendly log of the currently linked personal web session.
 	const { e164, jid } = readWebSelfId();
 	const details =
 		e164 || jid
 			? `${e164 ?? "unknown"}${jid ? ` (jid ${jid})` : ""}`
 			: "unknown";
-	runtime.log(info(`Listening on web session: ${details}`));
+	const prefix = includeProviderPrefix
+		? "Provider: web (personal WhatsApp Web session) — "
+		: "";
+	runtime.log(info(`${prefix}Listening on web session: ${details}`));
 }
 
 export async function pickProvider(pref: Provider | "auto"): Promise<Provider> {

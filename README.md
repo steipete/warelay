@@ -36,6 +36,7 @@ You can also talk to WhatsApp directly with a personal WhatsApp Web session (QR 
 ## Common Commands
 
 - Send: `pnpm warelay send --to +12345550000 --message "Hello" --wait 20 --poll 2`
+- Send (JSON output): `pnpm warelay send --to +12345550000 --message "Hello" --json`
 - Send via personal WhatsApp Web: first `pnpm warelay web:login` (alias: `pnpm warelay login`, scan QR), then `pnpm warelay send --provider web --to +12345550000 --message "Hi"`
 - Auto-replies (auto provider): `pnpm warelay relay` (uses web if logged in, otherwise twilio poll)
 - Auto-replies (force web): `pnpm warelay relay --provider web`
