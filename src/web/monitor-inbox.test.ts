@@ -5,13 +5,13 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogger, setLoggerOverride } from "../logging.js";
+import { monitorWebInbox } from "./inbound.js";
 import {
   getLastSocket,
   resetBaileysMocks,
   resetLoadConfigMock,
 } from "./test-helpers.js";
-import { resetLogger, setLoggerOverride } from "../logging.js";
-import { monitorWebInbox } from "./inbound.js";
 
 describe("web monitor inbox", () => {
   beforeEach(() => {

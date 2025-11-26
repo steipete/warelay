@@ -2,14 +2,14 @@ import { EventEmitter } from "node:events";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogger, setLoggerOverride } from "../logging.js";
+import { loginWeb } from "./login.js";
+import type { waitForWaConnection } from "./session.js";
 import {
   baileys,
   resetBaileysMocks,
   resetLoadConfigMock,
 } from "./test-helpers.js";
-import { resetLogger, setLoggerOverride } from "../logging.js";
-import { loginWeb } from "./login.js";
-import type { waitForWaConnection } from "./session.js";
 
 describe("web login", () => {
   beforeEach(() => {

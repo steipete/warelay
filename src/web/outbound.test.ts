@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogger, setLoggerOverride } from "../logging.js";
+import { sendMessageWeb } from "./outbound.js";
 import {
   getLastSocket,
   resetBaileysMocks,
   resetLoadConfigMock,
 } from "./test-helpers.js";
-import { resetLogger, setLoggerOverride } from "../logging.js";
-import { sendMessageWeb } from "./outbound.js";
 
 describe("web outbound", () => {
   beforeEach(() => {

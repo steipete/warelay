@@ -3,13 +3,13 @@ import fs from "node:fs/promises";
 import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resetLogger, setLoggerOverride } from "../logging.js";
+import { monitorWebProvider } from "./auto-reply.js";
 import {
   resetBaileysMocks,
   resetLoadConfigMock,
   setLoadConfigMock,
 } from "./test-helpers.js";
-import { resetLogger, setLoggerOverride } from "../logging.js";
-import { monitorWebProvider } from "./auto-reply.js";
 
 describe("web auto-reply", () => {
   beforeEach(() => {
