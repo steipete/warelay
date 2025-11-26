@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import type { WarelayConfig } from "../config/config.js";
@@ -19,6 +20,8 @@ type CommandReplyConfig = NonNullable<WarelayConfig["inbound"]>["reply"] & {
   mode: "command";
 };
 
+type EnqueueRunner = typeof enqueueCommand;
+
 type CommandReplyParams = {
   reply: CommandReplyConfig;
   templatingCtx: TemplateContext;
@@ -29,9 +32,25 @@ type CommandReplyParams = {
   timeoutMs: number;
   timeoutSeconds: number;
   commandRunner: typeof runCommandWithTimeout;
+  enqueue?: EnqueueRunner;
 };
 
-function summarizeClaudeMetadata(payload: unknown): string | undefined {
+export type CommandReplyMeta = {
+  durationMs: number;
+  queuedMs?: number;
+  queuedAhead?: number;
+  exitCode?: number | null;
+  signal?: string | null;
+  killed?: boolean;
+  claudeMeta?: string;
+};
+
+export type CommandReplyResult = {
+  payload?: ReplyPayload;
+  meta: CommandReplyMeta;
+};
+
+export function summarizeClaudeMetadata(payload: unknown): string | undefined {
   if (!payload || typeof payload !== "object") return undefined;
   const obj = payload as Record<string, unknown>;
   const parts: string[] = [];
@@ -83,7 +102,7 @@ function summarizeClaudeMetadata(payload: unknown): string | undefined {
 
 export async function runCommandReply(
   params: CommandReplyParams,
-): Promise<ReplyPayload | undefined> {
+): Promise<CommandReplyResult> {
   const {
     reply,
     templatingCtx,
@@ -94,6 +113,7 @@ export async function runCommandReply(
     timeoutMs,
     timeoutSeconds,
     commandRunner,
+    enqueue = enqueueCommand,
   } = params;
 
   let argv = reply.command.map((part) => applyTemplate(part, templatingCtx));
@@ -167,11 +187,15 @@ export async function runCommandReply(
   );
 
   const started = Date.now();
+  let queuedMs: number | undefined;
+  let queuedAhead: number | undefined;
   try {
-    const { stdout, stderr, code, signal, killed } = await enqueueCommand(
+    const { stdout, stderr, code, signal, killed } = await enqueue(
       () => commandRunner(finalArgv, { timeoutMs, cwd: reply.cwd }),
       {
-        onWait: (waitMs, queuedAhead) => {
+        onWait: (waitMs, ahead) => {
+          queuedMs = waitMs;
+          queuedAhead = ahead;
           if (isVerbose()) {
             logVerbose(
               `Command auto-reply queued for ${waitMs}ms (${queuedAhead} ahead)`,
@@ -223,23 +247,86 @@ export async function runCommandReply(
       console.error(
         `Command auto-reply exited with code ${code ?? "unknown"} (signal: ${signal ?? "none"})`,
       );
-      return undefined;
+      return {
+        payload: undefined,
+        meta: {
+          durationMs: Date.now() - started,
+          queuedMs,
+          queuedAhead,
+          exitCode: code,
+          signal,
+          killed,
+          claudeMeta: parsed ? summarizeClaudeMetadata(parsed.parsed) : undefined,
+        },
+      };
     }
     if (killed && !signal) {
       console.error(
         `Command auto-reply process killed before completion (exit code ${code ?? "unknown"})`,
       );
-      return undefined;
+      return {
+        payload: undefined,
+        meta: {
+          durationMs: Date.now() - started,
+          queuedMs,
+          queuedAhead,
+          exitCode: code,
+          signal,
+          killed,
+          claudeMeta: parsed ? summarizeClaudeMetadata(parsed.parsed) : undefined,
+        },
+      };
     }
-    const mediaUrls =
+    let mediaUrls =
       mediaFromCommand ?? (reply.mediaUrl ? [reply.mediaUrl] : undefined);
-    return trimmed || mediaUrls?.length
-      ? {
-          text: trimmed || undefined,
-          mediaUrl: mediaUrls?.[0],
-          mediaUrls,
+
+    // If mediaMaxMb is set, skip local media paths larger than the cap.
+    if (mediaUrls?.length && reply.mediaMaxMb) {
+      const maxBytes = reply.mediaMaxMb * 1024 * 1024;
+      const filtered: string[] = [];
+      for (const url of mediaUrls) {
+        if (/^https?:\/\//i.test(url)) {
+          filtered.push(url);
+          continue;
         }
-      : undefined;
+        const abs = path.isAbsolute(url) ? url : path.resolve(url);
+        try {
+          const stats = await fs.stat(abs);
+          if (stats.size <= maxBytes) {
+            filtered.push(url);
+          } else if (isVerbose()) {
+            logVerbose(
+              `Skipping media ${url} (${(stats.size / (1024 * 1024)).toFixed(2)}MB) over cap ${reply.mediaMaxMb}MB`,
+            );
+          }
+        } catch {
+          filtered.push(url);
+        }
+      }
+      mediaUrls = filtered;
+    }
+
+    const payload =
+      trimmed || mediaUrls?.length
+        ? {
+            text: trimmed || undefined,
+            mediaUrl: mediaUrls?.[0],
+            mediaUrls,
+          }
+        : undefined;
+    const meta: CommandReplyMeta = {
+      durationMs: Date.now() - started,
+      queuedMs,
+      queuedAhead,
+      exitCode: code,
+      signal,
+      killed,
+      claudeMeta: parsed ? summarizeClaudeMetadata(parsed.parsed) : undefined,
+    };
+    if (isVerbose()) {
+      logVerbose(`Command auto-reply meta: ${JSON.stringify(meta)}`);
+    }
+    return { payload, meta };
   } catch (err) {
     const elapsed = Date.now() - started;
     const anyErr = err as { killed?: boolean; signal?: string };
@@ -261,9 +348,29 @@ export async function runCommandReply(
       const text = partialSnippet
         ? `${baseMsg}\n\nPartial output before timeout:\n${partialSnippet}`
         : baseMsg;
-      return { text };
+      return {
+        payload: { text },
+        meta: {
+          durationMs: elapsed,
+          queuedMs,
+          queuedAhead,
+          exitCode: undefined,
+          signal: anyErr.signal,
+          killed: anyErr.killed,
+        },
+      };
     }
     logError(`Command auto-reply failed after ${elapsed}ms: ${String(err)}`);
-    return undefined;
+    return {
+      payload: undefined,
+      meta: {
+        durationMs: elapsed,
+        queuedMs,
+        queuedAhead,
+        exitCode: undefined,
+        signal: anyErr.signal,
+        killed: anyErr.killed,
+      },
+    };
   }
 }

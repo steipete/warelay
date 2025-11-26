@@ -241,7 +241,7 @@ export async function getReplyFromConfig(
   if (reply.mode === "command" && reply.command?.length) {
     await onReplyStart();
     try {
-      const result = await runCommandReply({
+      const { payload, meta } = await runCommandReply({
         reply,
         templatingCtx,
         sendSystemOnce,
@@ -252,7 +252,10 @@ export async function getReplyFromConfig(
         timeoutSeconds,
         commandRunner,
       });
-      return result;
+      if (meta.claudeMeta && isVerbose()) {
+        logVerbose(`Claude JSON meta: ${meta.claudeMeta}`);
+      }
+      return payload;
     } finally {
       cleanupTyping();
     }
