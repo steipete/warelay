@@ -122,7 +122,8 @@ export async function monitorWebProvider(
                   });
                 } else {
                   const fileName = mediaUrl.split("/").pop() ?? "file";
-                  const mimetype = media.contentType ?? "application/octet-stream";
+                  const mimetype =
+                    media.contentType ?? "application/octet-stream";
                   await msg.sendMedia({
                     document: media.buffer,
                     fileName,
