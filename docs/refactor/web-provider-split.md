@@ -11,6 +11,7 @@ Context: `src/provider-web.ts` was a 900+ line ball of mud mixing session manage
 - Bounded reconnects: web relay uses capped exponential backoff (default 2s→30s, max 12 attempts). CLI knobs `--web-retries`, `--web-retry-initial`, `--web-retry-max`, `--web-heartbeat` and config `web.reconnect`/`web.heartbeatSeconds` tune the behavior.
 - Backoff reset after healthy uptime; logged-out state still exits immediately.
 - Extracted reconnect/heartbeat helpers to `src/web/reconnect.ts` with unit tests.
+- Added troubleshooting guide at `docs/refactor/web-relay-troubleshooting.md` (common errors, knobs, logs).
 
 ## How to use
 - Link: `warelay login --provider web`

@@ -40,6 +40,7 @@ export async function monitorWebProvider(
   const runId = newConnectionId();
   const replyLogger = getChildLogger({ module: "web-auto-reply", runId });
   const heartbeatLogger = getChildLogger({ module: "web-heartbeat", runId });
+  const reconnectLogger = getChildLogger({ module: "web-reconnect", runId });
   const cfg = loadConfig();
   const configuredMaxMb = cfg.inbound?.reply?.mediaMaxMb;
   const maxMediaBytes =
@@ -319,6 +320,16 @@ export async function monitorWebProvider(
       "isLoggedOut" in reason &&
       (reason as { isLoggedOut?: boolean }).isLoggedOut;
 
+    reconnectLogger.info(
+      {
+        connectionId,
+        status,
+        loggedOut,
+        reconnectAttempts,
+      },
+      "web reconnect: connection closed",
+    );
+
     if (loggedOut) {
       runtime.error(
         danger(
@@ -334,6 +345,15 @@ export async function monitorWebProvider(
       reconnectPolicy.maxAttempts > 0 &&
       reconnectAttempts >= reconnectPolicy.maxAttempts
     ) {
+      reconnectLogger.warn(
+        {
+          connectionId,
+          status,
+          reconnectAttempts,
+          maxAttempts: reconnectPolicy.maxAttempts,
+        },
+        "web reconnect: max attempts reached",
+      );
       runtime.error(
         danger(
           `WhatsApp Web connection closed (status ${status}). Reached max retries (${reconnectPolicy.maxAttempts}); exiting so you can relink.`,
@@ -344,6 +364,16 @@ export async function monitorWebProvider(
     }
 
     const delay = computeBackoff(reconnectPolicy, reconnectAttempts);
+    reconnectLogger.info(
+      {
+        connectionId,
+        status,
+        reconnectAttempts,
+        maxAttempts: reconnectPolicy.maxAttempts || "unlimited",
+        delayMs: delay,
+      },
+      "web reconnect: scheduling retry",
+    );
     runtime.error(
       danger(
         `WhatsApp Web connection closed (status ${status}). Retry ${reconnectAttempts}/${reconnectPolicy.maxAttempts || "∞"} in ${formatDuration(delay)}…`,
