@@ -13,6 +13,12 @@ import {
   type ClaudeJsonParseResult,
   parseClaudeJson,
 } from "./claude.js";
+import {
+  OPENCODE_BIN,
+  OPENCODE_IDENTITY_PREFIX,
+  type OpencodeJsonParseResult,
+  parseOpencodeJson,
+} from "./opencode.js";
 import { applyTemplate, type TemplateContext } from "./templating.js";
 import type { ReplyPayload } from "./types.js";
 
@@ -155,14 +161,39 @@ export async function runCommandReply(
       const insertIdx = Math.max(argv.length - 1, 0);
       argv = [...argv.slice(0, insertIdx), "-p", ...argv.slice(insertIdx)];
     }
+
+    // Ensure Opencode commands use JSON format for robust parsing.
+    if (argv.length > 0 && path.basename(argv[0]) === OPENCODE_BIN) {
+      const hasFormat = argv.some(
+        (part) => part === "--format" || part.startsWith("--format="),
+      );
+      if (!hasFormat) {
+        const insertBeforeBody = Math.max(argv.length - 1, 0);
+        argv = [
+          ...argv.slice(0, insertBeforeBody),
+          "--format",
+          "json",
+          ...argv.slice(insertBeforeBody),
+        ];
+      }
+    }
   }
 
   // Inject session args if configured (use resume for existing, session-id for new)
   if (reply.session) {
+    const isOpencode =
+      argv.length > 0 && path.basename(argv[0]) === OPENCODE_BIN;
+    const defaultNew = isOpencode
+      ? ["--session", "{{SessionId}}"]
+      : ["--session-id", "{{SessionId}}"];
+    const defaultResume = isOpencode
+      ? ["--session", "{{SessionId}}"]
+      : ["--resume", "{{SessionId}}"];
+
     const sessionArgList = (
       isNewSession
-        ? (reply.session.sessionArgNew ?? ["--session-id", "{{SessionId}}"])
-        : (reply.session.sessionArgResume ?? ["--resume", "{{SessionId}}"])
+        ? (reply.session.sessionArgNew ?? defaultNew)
+        : (reply.session.sessionArgResume ?? defaultResume)
     ).map((part) => applyTemplate(part, templatingCtx));
     if (sessionArgList.length) {
       const insertBeforeBody = reply.session.sessionArgBeforeBody ?? true;
@@ -179,14 +210,22 @@ export async function runCommandReply(
   let finalArgv = argv;
   const isClaudeInvocation =
     finalArgv.length > 0 && path.basename(finalArgv[0]) === CLAUDE_BIN;
+  const isOpencodeInvocation =
+    finalArgv.length > 0 && path.basename(finalArgv[0]) === OPENCODE_BIN;
   const shouldPrependIdentity =
-    isClaudeInvocation && !(sendSystemOnce && systemSent);
+    (isClaudeInvocation || isOpencodeInvocation) &&
+    !(sendSystemOnce && systemSent);
   if (shouldPrependIdentity && finalArgv.length > 0) {
     const bodyIdx = finalArgv.length - 1;
     const existingBody = finalArgv[bodyIdx] ?? "";
     finalArgv = [
       ...finalArgv.slice(0, bodyIdx),
-      [CLAUDE_IDENTITY_PREFIX, existingBody].filter(Boolean).join("\n\n"),
+      [
+        isClaudeInvocation ? CLAUDE_IDENTITY_PREFIX : OPENCODE_IDENTITY_PREFIX,
+        existingBody,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     ];
   }
   logVerbose(
@@ -217,7 +256,7 @@ export async function runCommandReply(
     if (stderr?.trim()) {
       logVerbose(`Command auto-reply stderr: ${stderr.trim()}`);
     }
-    let parsed: ClaudeJsonParseResult | undefined;
+    let parsed: ClaudeJsonParseResult | OpencodeJsonParseResult | undefined;
     if (
       trimmed &&
       (reply.claudeOutputFormat === "json" || isClaudeInvocation)
@@ -237,6 +276,14 @@ export async function runCommandReply(
         trimmed = parsed.text.trim();
       } else {
         logVerbose("Claude JSON parse failed; returning raw stdout");
+      }
+    } else if (trimmed && isOpencodeInvocation) {
+      parsed = parseOpencodeJson(trimmed);
+      if (parsed.valid && isVerbose()) {
+        logVerbose(`Opencode JSON parsed -> ${parsed.text?.slice(0, 120)}...`);
+      }
+      if (parsed.text) {
+        trimmed = parsed.text.trim();
       }
     }
     const { text: cleanedText, mediaUrls: mediaFound } =
