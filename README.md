@@ -10,10 +10,12 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License"></a>
 </p>
 
-Send, receive, auto-reply, and inspect WhatsApp messages over **Twilio** or your personal **WhatsApp Web** session. Ships with a one-command webhook setup (Tailscale Funnel + Twilio callback) and a configurable auto-reply engine (plain text or command/Claude driven).
+Send, receive, auto-reply, and inspect WhatsApp messages over **Twilio** or your personal **WhatsApp Web** session. Ships with a one-command webhook setup (Tailscale Funnel + Twilio callback) and a configurable auto-reply engine (plain text or command/Claude/Opencode driven).
 
 ### Clawd (personal assistant)
 I'm using warelay to run my personal, pro-active assistant, **Clawd**. Follow me on Twitter: [@steipete](https://twitter.com/steipete). This project is brand-new and there's a lot to discover. See the exact Claude setup in [`docs/clawd.md`](https://github.com/steipete/warelay/blob/main/docs/clawd.md).
+
+We also support **Opencode**! See the setup guide for **Openclawd** in [`docs/openclawd.md`](https://github.com/steipete/warelay/blob/main/docs/openclawd.md).
 
 I'm using warelay to run **my personal, pro-active assistant, Clawd**.
 Follow me on Twitter - @steipete, this project is brand-new and there's a lot to discover.
@@ -37,8 +39,9 @@ Install from npm (global): `npm install -g warelay` (Node 22+). Then choose **on
 
 ## Main Features
 - **Two providers:** Twilio (default) for reliable delivery + status; Web provider for quick personal sends/receives via QR login.
-- **Auto-replies:** Static templates or external commands (Claude-aware), with per-sender or global sessions and `/new` resets.
+- **Auto-replies:** Static templates or external commands (Claude/Opencode-aware), with per-sender or global sessions and `/new` resets.
 - Claude setup guide: see `docs/claude-config.md` for the exact Claude CLI configuration we support.
+- Opencode setup guide: see `docs/openclawd.md` for Opencode CLI configuration.
 - **Webhook in one go:** `warelay webhook --ingress tailscale` enables Tailscale Funnel, runs the webhook server, and updates the Twilio sender callback URL.
 - **Polling fallback:** `relay` polls Twilio when webhooks aren’t available; works headless.
 - **Status + delivery tracking:** `status` shows recent inbound/outbound; `send` can wait for final Twilio status.
