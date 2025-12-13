@@ -24,6 +24,7 @@ struct MenuContent: View {
     private let contextCardPadding: CGFloat = 10
     private let contextBarHeight: CGFloat = 4
     private let contextFallbackWidth: CGFloat = 320
+    private let contextSessionRowHeight: CGFloat = 18
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -315,7 +316,14 @@ struct MenuContent: View {
     @ViewBuilder
     private func contextSessionRow(_ row: SessionRow) -> some View {
         let width = self.contextPillWidth
-        VStack(alignment: .leading, spacing: 4) {
+        ZStack(alignment: .bottomLeading) {
+            ContextUsageBar(
+                usedTokens: row.tokens.total,
+                contextTokens: row.tokens.contextTokens,
+                width: width,
+                height: self.contextBarHeight)
+                .padding(.bottom, 0)
+
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(row.key)
                     .font(.caption.weight(row.key == "main" ? .semibold : .regular))
@@ -330,15 +338,10 @@ struct MenuContent: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(2)
             }
+            .padding(.bottom, self.contextBarHeight + 4)
             .frame(width: width)
-
-            ContextUsageBar(
-                usedTokens: row.tokens.total,
-                contextTokens: row.tokens.contextTokens,
-                width: width,
-                height: self.contextBarHeight)
         }
-        .frame(width: width)
+        .frame(width: width, height: self.contextSessionRowHeight, alignment: .bottomLeading)
     }
 
     private var heartbeatStatusRow: some View {
