@@ -324,6 +324,13 @@ export async function agentCommand(
       thinkLevel: resolvedThinkLevel,
       verboseLevel: resolvedVerboseLevel,
       runId: sessionId,
+      onAgentEvent: (evt) => {
+        emitAgentEvent({
+          runId: sessionId,
+          stream: evt.stream,
+          data: evt.data,
+        });
+      },
     });
     emitAgentEvent({
       runId: sessionId,
