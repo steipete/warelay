@@ -15,6 +15,13 @@ final class OnboardingController {
     private var window: NSWindow?
 
     func show() {
+        if ProcessInfo.processInfo.isNixMode {
+            // Nix mode is fully declarative; onboarding would suggest interactive setup that doesn't apply.
+            UserDefaults.standard.set(true, forKey: "clawdis.onboardingSeen")
+            UserDefaults.standard.set(currentOnboardingVersion, forKey: onboardingVersionKey)
+            AppStateStore.shared.onboardingSeen = true
+            return
+        }
         if let window {
             DockIconManager.shared.temporarilyShowDock()
             window.makeKeyAndOrderFront(nil)

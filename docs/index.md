@@ -116,6 +116,7 @@ Example:
 
 - Start here:
   - [Configuration](./configuration.md)
+  - [Nix mode](./nix.md)
   - [Clawd personal assistant setup](./clawd.md)
   - [Skills](./skills.md)
   - [Workspace templates](./templates/AGENTS.md)

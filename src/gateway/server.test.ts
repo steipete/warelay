@@ -189,6 +189,7 @@ vi.mock("../config/config.js", () => {
 
   return {
     CONFIG_PATH_CLAWDIS: resolveConfigPath(),
+    isNixMode: false,
     loadConfig: () => ({
       agent: {
         model: "anthropic/claude-opus-4-5",

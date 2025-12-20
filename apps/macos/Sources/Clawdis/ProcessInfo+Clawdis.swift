@@ -5,6 +5,10 @@ extension ProcessInfo {
         self.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
     }
 
+    var isNixMode: Bool {
+        self.environment["CLAWDIS_NIX_MODE"] == "1"
+    }
+
     var isRunningTests: Bool {
         // SwiftPM tests load one or more `.xctest` bundles. With Swift Testing, `Bundle.main` is not
         // guaranteed to be the `.xctest` bundle, so check all loaded bundles.

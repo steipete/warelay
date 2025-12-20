@@ -46,6 +46,7 @@ import { getStatusSummary } from "../commands/status.js";
 import {
   type ClawdisConfig,
   CONFIG_PATH_CLAWDIS,
+  isNixMode,
   loadConfig,
   parseConfigJson5,
   readConfigFileSnapshot,
@@ -1876,6 +1877,30 @@ export async function startGatewayServer(
     };
   };
 
+  /**
+   * Load telegram token with priority: env var > tokenFile > botToken.
+   * tokenFile supports secret managers (e.g., agenix).
+   */
+  const loadTelegramToken = (cfg: ClawdisConfig): string => {
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      return process.env.TELEGRAM_BOT_TOKEN.trim();
+    }
+    if (cfg.telegram?.tokenFile) {
+      const filePath = cfg.telegram.tokenFile;
+      if (!fs.existsSync(filePath)) {
+        logTelegram.info(`telegram tokenFile not found: ${filePath}`);
+        return "";
+      }
+      try {
+        return fs.readFileSync(filePath, "utf-8").trim();
+      } catch (err) {
+        logTelegram.info(`failed to read telegram tokenFile: ${String(err)}`);
+        return "";
+      }
+    }
+    return cfg.telegram?.botToken?.trim() ?? "";
+  };
+
   const startTelegramProvider = async () => {
     if (telegramTask) return;
     const cfg = loadConfig();
@@ -1888,8 +1913,7 @@ export async function startGatewayServer(
       logTelegram.info("skipping provider start (telegram.enabled=false)");
       return;
     }
-    const telegramToken =
-      process.env.TELEGRAM_BOT_TOKEN ?? cfg.telegram?.botToken ?? "";
+    const telegramToken = loadTelegramToken(cfg);
     if (!telegramToken.trim()) {
       telegramRuntime = {
         ...telegramRuntime,
@@ -6090,6 +6114,9 @@ export async function startGatewayServer(
   });
   log.info(`listening on ws://${bindHost}:${port} (PID ${process.pid})`);
   log.info(`log file: ${getResolvedLoggerSettings().file}`);
+  if (isNixMode) {
+    log.info("gateway: running in Nix mode (config managed externally)");
+  }
   let tailscaleCleanup: (() => Promise<void>) | null = null;
   if (tailscaleMode !== "off") {
     try {
