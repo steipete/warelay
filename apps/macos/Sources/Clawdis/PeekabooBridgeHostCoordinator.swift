@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import os
 import PeekabooAutomationKit
 import PeekabooBridge
@@ -32,7 +33,10 @@ final class PeekabooBridgeHostCoordinator {
     private func startIfNeeded() async {
         guard self.host == nil else { return }
 
-        let allowlistedTeamIDs: Set<String> = ["Y5PE65HELJ"]
+        var allowlistedTeamIDs: Set<String> = ["Y5PE65HELJ"]
+        if let teamID = Self.currentTeamID() {
+            allowlistedTeamIDs.insert(teamID)
+        }
         let allowlistedBundles: Set<String> = []
 
         let services = ClawdisPeekabooBridgeServices()
@@ -54,6 +58,31 @@ final class PeekabooBridgeHostCoordinator {
         await host.start()
         self.logger
             .info("PeekabooBridge host started at \(PeekabooBridgeConstants.clawdisSocketPath, privacy: .public)")
+    }
+
+    private static func currentTeamID() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess,
+              let code
+        else {
+            return nil
+        }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, SecCSFlags(), &staticCode) == errSecSuccess,
+              let staticCode
+        else {
+            return nil
+        }
+
+        var infoCF: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &infoCF) == errSecSuccess,
+              let info = infoCF as? [String: Any]
+        else {
+            return nil
+        }
+
+        return info[kSecCodeInfoTeamIdentifier as String] as? String
     }
 }
 
