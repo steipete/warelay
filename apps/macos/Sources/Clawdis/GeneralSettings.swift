@@ -17,6 +17,7 @@ struct GeneralSettings: View {
     @State private var remoteStatus: RemoteStatus = .idle
     @State private var showRemoteAdvanced = false
     private let isPreview = ProcessInfo.processInfo.isPreview
+    private var isNixMode: Bool { ProcessInfo.processInfo.isNixMode }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -125,7 +126,10 @@ struct GeneralSettings: View {
             }
 
             if self.state.connectionMode == .local {
-                self.gatewayInstallerCard
+                // In Nix mode, gateway is managed declaratively - no install buttons.
+                if !self.isNixMode {
+                    self.gatewayInstallerCard
+                }
                 TailscaleIntegrationSection(
                     connectionMode: self.state.connectionMode,
                     isPaused: self.state.isPaused)

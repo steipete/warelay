@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
 import { type DiscordProbe, probeDiscord } from "../discord/probe.js";
@@ -53,6 +55,25 @@ export type HealthSummary = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+function loadTelegramToken(cfg: ReturnType<typeof loadConfig>): string {
+  const env = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (env) return env;
+
+  const tokenFile = cfg.telegram?.tokenFile?.trim();
+  if (tokenFile) {
+    try {
+      if (fs.existsSync(tokenFile)) {
+        const token = fs.readFileSync(tokenFile, "utf-8").trim();
+        if (token) return token;
+      }
+    } catch {
+      // Ignore errors; health should be non-fatal.
+    }
+  }
+
+  return cfg.telegram?.botToken?.trim() ?? "";
+}
+
 export async function getHealthSnapshot(
   timeoutMs?: number,
 ): Promise<HealthSummary> {
@@ -74,8 +95,7 @@ export async function getHealthSnapshot(
 
   const start = Date.now();
   const cappedTimeout = Math.max(1000, timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const telegramToken =
-    process.env.TELEGRAM_BOT_TOKEN ?? cfg.telegram?.botToken ?? "";
+  const telegramToken = loadTelegramToken(cfg);
   const telegramConfigured = telegramToken.trim().length > 0;
   const telegramProxy = cfg.telegram?.proxy;
   const telegramProbe = telegramConfigured

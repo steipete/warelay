@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import chalk from "chalk";
 import { type ClawdisConfig, loadConfig } from "../config/config.js";
 import { normalizeE164 } from "../utils.js";
@@ -36,8 +37,12 @@ export async function buildProviderSummary(
   } else {
     const telegramToken =
       process.env.TELEGRAM_BOT_TOKEN ?? effective.telegram?.botToken;
+    const telegramTokenFile = effective.telegram?.tokenFile?.trim();
+    const telegramConfigured =
+      Boolean(telegramToken) ||
+      Boolean(telegramTokenFile ? fs.existsSync(telegramTokenFile) : false);
     lines.push(
-      telegramToken
+      telegramConfigured
         ? chalk.green("Telegram: configured")
         : chalk.cyan("Telegram: not configured"),
     );

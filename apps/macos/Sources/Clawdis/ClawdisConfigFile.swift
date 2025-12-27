@@ -20,6 +20,7 @@ enum ClawdisConfigFile {
     }
 
     static func saveDict(_ dict: [String: Any]) {
+        if ProcessInfo.processInfo.isNixMode { return }
         do {
             let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
             let url = self.url()

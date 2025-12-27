@@ -45,6 +45,24 @@ struct PermissionStatusList: View {
             .font(.footnote)
             .padding(.top, 2)
             .help("Refresh status")
+
+            if (self.status[.accessibility] ?? false) == false || (self.status[.screenRecording] ?? false) == false {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Note: macOS may require restarting Clawdis after enabling Accessibility or Screen Recording.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        LaunchdManager.startClawdis()
+                    } label: {
+                        Label("Restart Clawdis", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.top, 4)
+            }
         }
     }
 

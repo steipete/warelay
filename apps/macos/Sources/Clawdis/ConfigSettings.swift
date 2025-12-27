@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct ConfigSettings: View {
     private let isPreview = ProcessInfo.processInfo.isPreview
+    private let isNixMode = ProcessInfo.processInfo.isNixMode
     private let state = AppStateStore.shared
     private let labelColumnWidth: CGFloat = 120
     private static let browserAttachOnlyHelp =
@@ -52,8 +53,11 @@ struct ConfigSettings: View {
         VStack(alignment: .leading, spacing: 14) {
             self.header
             self.agentSection
+                .disabled(self.isNixMode)
             self.heartbeatSection
+                .disabled(self.isNixMode)
             self.browserSection
+                .disabled(self.isNixMode)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,7 +70,9 @@ struct ConfigSettings: View {
     private var header: some View {
         Text("Clawdis CLI config")
             .font(.title3.weight(.semibold))
-        Text("Edit ~/.clawdis/clawdis.json (agent / session / routing / messages).")
+        Text(self.isNixMode
+            ? "This tab is read-only in Nix mode. Edit config via Nix and rebuild."
+            : "Edit ~/.clawdis/clawdis.json (agent / session / routing / messages).")
             .font(.callout)
             .foregroundStyle(.secondary)
     }
@@ -300,7 +306,7 @@ struct ConfigSettings: View {
     }
 
     private func autosaveConfig() {
-        guard self.allowAutosave else { return }
+        guard self.allowAutosave, !self.isNixMode else { return }
         Task { await self.saveConfig() }
     }
 

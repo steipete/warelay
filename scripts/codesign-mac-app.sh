@@ -4,10 +4,10 @@ set -euo pipefail
 APP_BUNDLE="${1:-dist/Clawdis.app}"
 IDENTITY="${SIGN_IDENTITY:-}"
 TIMESTAMP_MODE="${CODESIGN_TIMESTAMP:-auto}"
-ENT_TMP_BASE=$(mktemp -t clawdis-entitlements-base)
-ENT_TMP_APP=$(mktemp -t clawdis-entitlements-app)
-ENT_TMP_APP_BASE=$(mktemp -t clawdis-entitlements-app-base)
-ENT_TMP_BUN=$(mktemp -t clawdis-entitlements-bun)
+ENT_TMP_BASE=$(mktemp -t clawdis-entitlements-base.XXXXXX)
+ENT_TMP_APP=$(mktemp -t clawdis-entitlements-app.XXXXXX)
+ENT_TMP_APP_BASE=$(mktemp -t clawdis-entitlements-app-base.XXXXXX)
+ENT_TMP_BUN=$(mktemp -t clawdis-entitlements-bun.XXXXXX)
 
 if [ ! -d "$APP_BUNDLE" ]; then
   echo "App bundle not found: $APP_BUNDLE" >&2
