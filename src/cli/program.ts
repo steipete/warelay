@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import { agentCommand } from "../commands/agent.js";
+import { doctorCommand } from "../commands/doctor.js";
 import { healthCommand } from "../commands/health.js";
 import { sendCommand } from "../commands/send.js";
 import { sessionsCommand } from "../commands/sessions.js";
@@ -109,6 +110,37 @@ export function buildProgram() {
       try {
         await setupCommand(
           { workspace: opts.workspace as string | undefined },
+          defaultRuntime,
+        );
+      } catch (err) {
+        defaultRuntime.error(String(err));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  program
+    .command("doctor")
+    .description("Check system prerequisites and configuration health")
+    .option("--json", "Output result as JSON", false)
+    .option("--verbose", "Show version details for each check", false)
+    .option("--fix", "Interactively fix detected issues", false)
+    .addHelpText(
+      "after",
+      `
+Examples:
+  clawdis doctor              # run all prerequisite checks
+  clawdis doctor --verbose    # show version info for each check
+  clawdis doctor --json       # machine-readable output for CI
+  clawdis doctor --fix        # interactively fix detected issues`,
+    )
+    .action(async (opts) => {
+      try {
+        await doctorCommand(
+          {
+            json: Boolean(opts.json),
+            verbose: Boolean(opts.verbose),
+            fix: Boolean(opts.fix),
+          },
           defaultRuntime,
         );
       } catch (err) {
