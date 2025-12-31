@@ -8,14 +8,23 @@ const ROOT_PREFIX = "/";
 
 function resolveControlUiRoot(): string | null {
   const here = path.dirname(fileURLToPath(import.meta.url));
+  const execDir = (() => {
+    try {
+      return path.dirname(fs.realpathSync(process.execPath));
+    } catch {
+      return null;
+    }
+  })();
   const candidates = [
+    // Packaged relay: Resources/Relay/control-ui
+    execDir ? path.resolve(execDir, "control-ui") : null,
     // Running from dist: dist/gateway/control-ui.js -> dist/control-ui
     path.resolve(here, "../control-ui"),
     // Running from source: src/gateway/control-ui.ts -> dist/control-ui
     path.resolve(here, "../../dist/control-ui"),
     // Fallback to cwd (dev)
     path.resolve(process.cwd(), "dist", "control-ui"),
-  ];
+  ].filter((dir): dir is string => Boolean(dir));
   for (const dir of candidates) {
     if (fs.existsSync(path.join(dir, "index.html"))) return dir;
   }
