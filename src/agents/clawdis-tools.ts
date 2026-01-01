@@ -1505,9 +1505,12 @@ function createSendMessageTool(): AnyAgentTool {
           typeof params.timeoutMs === "number" ? params.timeoutMs : undefined,
       };
 
+      // Prefix messages with Zee identifier so recipients know it's the assistant
+      const prefixedMessage = `🤖 Zee: ${message}`;
+
       const result = await callGatewayTool("send", gatewayOpts, {
         to,
-        message,
+        message: prefixedMessage,
         provider,
         mediaUrl,
         idempotencyKey: crypto.randomUUID(),
