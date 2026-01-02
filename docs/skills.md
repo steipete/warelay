@@ -59,6 +59,7 @@ Fields under `metadata.clawdis`:
 - `emoji` — optional emoji used by the macOS Skills UI.
 - `homepage` — optional URL shown as “Website” in the macOS Skills UI.
 - `requires.bins` — list; each must exist on `PATH`.
+- `requires.anyBins` — list; at least one must exist on `PATH`.
 - `requires.env` — list; env var must exist **or** be provided in config.
 - `requires.config` — list of `clawdis.json` paths that must be truthy.
 - `primaryEnv` — env var name associated with `skills.<name>.apiKey`.

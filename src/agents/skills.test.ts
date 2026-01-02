@@ -214,6 +214,12 @@ describe("buildWorkspaceSkillsPrompt", () => {
       metadata: '{"clawdis":{"requires":{"bins":["fakebin"]}}}',
     });
     await writeSkill({
+      dir: path.join(skillsDir, "anybin-skill"),
+      name: "anybin-skill",
+      description: "Needs any bin",
+      metadata: '{"clawdis":{"requires":{"anyBins":["missingbin","fakebin"]}}}',
+    });
+    await writeSkill({
       dir: path.join(skillsDir, "config-skill"),
       name: "config-skill",
       description: "Needs config",
@@ -240,6 +246,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
       expect(defaultPrompt).toContain("always-skill");
       expect(defaultPrompt).toContain("config-skill");
       expect(defaultPrompt).not.toContain("bin-skill");
+      expect(defaultPrompt).not.toContain("anybin-skill");
       expect(defaultPrompt).not.toContain("env-skill");
 
       await fs.mkdir(binDir, { recursive: true });
@@ -256,6 +263,7 @@ describe("buildWorkspaceSkillsPrompt", () => {
         },
       });
       expect(gatedPrompt).toContain("bin-skill");
+      expect(gatedPrompt).toContain("anybin-skill");
       expect(gatedPrompt).toContain("env-skill");
       expect(gatedPrompt).toContain("always-skill");
       expect(gatedPrompt).not.toContain("config-skill");
