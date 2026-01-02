@@ -272,11 +272,17 @@ Controls the embedded agent runtime (model/thinking/verbose/timeouts).
 `allowedModels` lets `/model` list/filter and enforce a per-session allowlist
 (omit to show the full catalog).
 `modelAliases` adds short names for `/model` (alias -> provider/model).
+`failoverModels` provides an ordered list of backup models to try when the
+primary model returns an error (quota, rate limit, network, etc).
 
 ```json5
 {
   agent: {
     model: "anthropic/claude-opus-4-5",
+    failoverModels: [
+      "anthropic/claude-sonnet-4-1",
+      "openai/gpt-4o"
+    ],
     allowedModels: [
       "anthropic/claude-opus-4-5",
       "anthropic/claude-sonnet-4-1"
@@ -310,6 +316,10 @@ If you omit the provider, CLAWDIS currently assumes `anthropic` as a temporary
 deprecation fallback.
 Z.AI models are available as `zai/<model>` (e.g. `zai/glm-4.7`) and require
 `ZAI_API_KEY` (or legacy `Z_AI_API_KEY`) in the environment.
+
+`agent.failoverModels` accepts an ordered list of fallback models (`provider/model`
+or alias). CLAWDIS uses them only for the current turn when the model errors
+before a successful reply; it does not persist as a `/model` override.
 
 `agent.heartbeat` configures periodic heartbeat runs:
 - `every`: duration string (`ms`, `s`, `m`, `h`); default unit minutes. Omit or set

@@ -480,6 +480,8 @@ export type ClawdisConfig = {
   agent?: {
     /** Model id (provider/model), e.g. "anthropic/claude-opus-4-5". */
     model?: string;
+    /** Ordered fallback models for failover (provider/model or alias). */
+    failoverModels?: string[];
     /** Agent working directory (preferred). Used as the default cwd for agent runs. */
     workspace?: string;
     /** Optional allowlist for /model (provider/model or model-only). */
@@ -851,6 +853,7 @@ const ClawdisSchema = z.object({
   agent: z
     .object({
       model: z.string().optional(),
+      failoverModels: z.array(z.string()).optional(),
       workspace: z.string().optional(),
       allowedModels: z.array(z.string()).optional(),
       modelAliases: z.record(z.string(), z.string()).optional(),

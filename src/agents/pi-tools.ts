@@ -141,14 +141,26 @@ function mergePropertySchemas(existing: unknown, incoming: unknown): unknown {
   return existing;
 }
 
-function normalizeToolParameters(tool: AnyAgentTool): AnyAgentTool {
+function normalizeToolParameters(
+  tool: AnyAgentTool,
+  options?: { stripAnyOf?: boolean },
+): AnyAgentTool {
   const schema =
     tool.parameters && typeof tool.parameters === "object"
       ? (tool.parameters as Record<string, unknown>)
       : undefined;
   if (!schema) return tool;
-  if ("type" in schema && "properties" in schema) return tool;
-  if (!Array.isArray(schema.anyOf)) return tool;
+  const stripAnyOf = options?.stripAnyOf === true;
+  if ("type" in schema && "properties" in schema) {
+    if (!stripAnyOf || !("anyOf" in schema)) return tool;
+    const { anyOf: _anyOf, ...rest } = schema;
+    return { ...tool, parameters: rest };
+  }
+  if (!Array.isArray(schema.anyOf)) {
+    if (!stripAnyOf || !("anyOf" in schema)) return tool;
+    const { anyOf: _anyOf, ...rest } = schema;
+    return { ...tool, parameters: rest };
+  }
   const mergedProperties: Record<string, unknown> = {};
   const requiredCounts = new Map<string, number>();
   let objectVariants = 0;
@@ -191,10 +203,12 @@ function normalizeToolParameters(tool: AnyAgentTool): AnyAgentTool {
             .map(([key]) => key)
         : undefined;
 
+  const { anyOf: _anyOf, ...rest } = schema;
+  const base = stripAnyOf ? rest : schema;
   return {
     ...tool,
     parameters: {
-      ...schema,
+      ...base,
       type: "object",
       properties:
         Object.keys(mergedProperties).length > 0
@@ -206,6 +220,64 @@ function normalizeToolParameters(tool: AnyAgentTool): AnyAgentTool {
       additionalProperties:
         "additionalProperties" in schema ? schema.additionalProperties : true,
     },
+  };
+}
+
+function sanitizeSchemaForGoogle(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => sanitizeSchemaForGoogle(item));
+  }
+  if (!schema || typeof schema !== "object") return schema;
+
+  const record = schema as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "const" || key === "patternProperties") continue;
+    next[key] = sanitizeSchemaForGoogle(value);
+  }
+
+  if ("const" in record) {
+    const constValue = record.const;
+    const existingEnum = Array.isArray(next.enum) ? next.enum : [];
+    if (!existingEnum.some((value) => value === constValue)) {
+      next.enum = [...existingEnum, constValue];
+    } else if (existingEnum.length > 0) {
+      next.enum = existingEnum;
+    }
+  }
+
+  if ("patternProperties" in record) {
+    const patternProps = record.patternProperties;
+    if (patternProps && typeof patternProps === "object") {
+      const entries = Object.entries(
+        patternProps as Record<string, unknown>,
+      );
+      if (entries.length === 1) {
+        const [, patternSchema] = entries[0];
+        if (next.additionalProperties === undefined) {
+          next.additionalProperties = sanitizeSchemaForGoogle(patternSchema);
+        }
+      } else if (entries.length > 1) {
+        if (next.additionalProperties === undefined) {
+          next.additionalProperties = true;
+        }
+      }
+    }
+  }
+
+  return next;
+}
+
+function sanitizeToolParametersForGoogle(tool: AnyAgentTool): AnyAgentTool {
+  const schema =
+    tool.parameters && typeof tool.parameters === "object"
+      ? (tool.parameters as Record<string, unknown>)
+      : undefined;
+  if (!schema) return tool;
+  return {
+    ...tool,
+    parameters: sanitizeSchemaForGoogle(schema),
   };
 }
 
@@ -296,6 +368,8 @@ function createClawdisReadTool(base: AnyAgentTool): AnyAgentTool {
 
 export function createClawdisCodingTools(options?: {
   bash?: BashToolDefaults & ProcessToolDefaults;
+  stripAnyOf?: boolean;
+  sanitizeForGoogle?: boolean;
 }): AnyAgentTool[] {
   const bashToolName = "bash";
   const base = (codingTools as unknown as AnyAgentTool[]).flatMap((tool) => {
@@ -314,5 +388,13 @@ export function createClawdisCodingTools(options?: {
     createWhatsAppLoginTool(),
     ...createClawdisTools(),
   ];
-  return tools.map(normalizeToolParameters);
+  return tools.map((tool) => {
+    let next = normalizeToolParameters(tool, {
+      stripAnyOf: options?.stripAnyOf,
+    });
+    if (options?.sanitizeForGoogle) {
+      next = sanitizeToolParametersForGoogle(next);
+    }
+    return next;
+  });
 }

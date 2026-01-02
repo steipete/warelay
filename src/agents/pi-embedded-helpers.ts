@@ -78,6 +78,77 @@ export async function sanitizeSessionMessagesImages(
   return out;
 }
 
+export function sanitizeSessionMessagesForGoogle(
+  messages: AppMessage[],
+): AppMessage[] {
+  type AssistantContentBlock =
+    Extract<AppMessage, { role: "assistant" }>["content"][number];
+  type AssistantToolCall = Extract<AssistantContentBlock, { type: "toolCall" }>;
+  const out: AppMessage[] = [];
+  const skippedToolCalls = new Set<string>();
+  let lastRole: string | undefined;
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") {
+      out.push(msg);
+      continue;
+    }
+    const role = (msg as { role?: unknown }).role;
+    if (role === "toolResult") {
+      const toolResult = msg as Extract<AppMessage, { role: "toolResult" }>;
+      const toolCallId =
+        typeof (toolResult as { toolCallId?: unknown }).toolCallId === "string"
+          ? (toolResult as { toolCallId: string }).toolCallId
+          : undefined;
+      if (toolCallId && skippedToolCalls.has(toolCallId)) {
+        continue;
+      }
+      out.push(toolResult);
+      lastRole = "toolResult";
+      continue;
+    }
+
+    if (role !== "assistant") {
+      out.push(msg);
+      lastRole = typeof role === "string" ? role : lastRole;
+      continue;
+    }
+
+    const assistantMsg = msg as Extract<AppMessage, { role: "assistant" }>;
+    const content = (assistantMsg as { content?: unknown }).content;
+    if (!Array.isArray(content)) {
+      out.push(msg);
+      lastRole = "assistant";
+      continue;
+    }
+    const toolOnly = content.filter(
+      (block): block is AssistantToolCall =>
+        block &&
+        typeof block === "object" &&
+        (block as { type?: unknown }).type === "toolCall",
+    );
+    const hasToolCall = toolOnly.length > 0;
+
+    if (!hasToolCall) {
+      out.push(msg);
+      lastRole = "assistant";
+      continue;
+    }
+
+    if (lastRole !== "user" && lastRole !== "toolResult") {
+      for (const block of toolOnly) {
+        if (typeof block.id === "string") {
+          skippedToolCalls.add(block.id);
+        }
+      }
+      continue;
+    }
+
+    out.push({ ...assistantMsg, content: toolOnly });
+    lastRole = "assistant";
+  }
+  return out;
+}
+
 export function buildBootstrapContextFiles(
   files: WorkspaceBootstrapFile[],
 ): EmbeddedContextFile[] {
