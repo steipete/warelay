@@ -378,6 +378,7 @@ export async function monitorDiscordProvider(opts: MonitorDiscordOpts = {}) {
         target: ctxPayload.To,
         token,
         runtime,
+        originalMessageId: ctxPayload.MessageSid,
       });
       if (isGuildMessage && shouldClearHistory && historyLimit > 0) {
         guildHistories.set(message.channelId, []);
@@ -878,12 +879,17 @@ async function deliverReplies({
   target,
   token,
   runtime,
+  originalMessageId,
 }: {
   replies: ReplyPayload[];
   target: string;
   token: string;
   runtime: RuntimeEnv;
+  /** Discord message ID to reply to (creates native reply link for the first message only) */
+  originalMessageId?: string;
 }) {
+  // Track whether we've sent the first message (only the first should be a reply)
+  let isFirstMessage = true;
   for (const payload of replies) {
     const mediaList =
       payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
@@ -891,7 +897,11 @@ async function deliverReplies({
     if (!text && mediaList.length === 0) continue;
     if (mediaList.length === 0) {
       for (const chunk of chunkText(text, 2000)) {
-        await sendMessageDiscord(target, chunk, { token });
+        await sendMessageDiscord(target, chunk, {
+          token,
+          replyTo: isFirstMessage ? originalMessageId : undefined,
+        });
+        isFirstMessage = false;
       }
     } else {
       let first = true;
@@ -901,7 +911,9 @@ async function deliverReplies({
         await sendMessageDiscord(target, caption, {
           token,
           mediaUrl,
+          replyTo: isFirstMessage ? originalMessageId : undefined,
         });
+        isFirstMessage = false;
       }
     }
     runtime.log?.(`delivered reply to ${target}`);
