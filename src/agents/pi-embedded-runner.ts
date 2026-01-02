@@ -34,6 +34,15 @@ import {
 import { CONFIG_DIR, resolveUserPath } from "../utils.js";
 import { resolveClawdisAgentDir } from "./agent-paths.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
+import { loadModelCatalog } from "./model-catalog.js";
+import {
+  buildAllowedModelSet,
+  buildModelAliasIndex,
+  modelKey,
+  resolveConfiguredModelRef,
+  resolveModelRefFromString,
+  type ModelRef,
+} from "./model-selection.js";
 import { ensureClawdisModelsJson } from "./models-config.js";
 import {
   buildBootstrapContextFiles,
@@ -72,6 +81,8 @@ export type EmbeddedPiRunMeta = {
   durationMs: number;
   agentMeta?: EmbeddedPiAgentMeta;
   aborted?: boolean;
+  stopReason?: string;
+  errorMessage?: string;
 };
 
 export type EmbeddedPiRunResult = {
@@ -193,6 +204,146 @@ function isOAuthProvider(provider: string): provider is OAuthProvider {
   );
 }
 
+async function resolveFailoverModels(params: {
+  config?: ClawdisConfig;
+  primaryProvider: string;
+  primaryModel: string;
+}): Promise<ModelRef[]> {
+  const cfg = params.config;
+  const rawList = cfg?.agent?.failoverModels ?? [];
+  if (rawList.length === 0) return [];
+
+  const primaryKey = modelKey(params.primaryProvider, params.primaryModel);
+  const aliasDefaultProvider = cfg
+    ? resolveConfiguredModelRef({
+        cfg,
+        defaultProvider: DEFAULT_PROVIDER,
+        defaultModel: DEFAULT_MODEL,
+      }).provider
+    : params.primaryProvider;
+  const aliasIndex = cfg
+    ? buildModelAliasIndex({ cfg, defaultProvider: aliasDefaultProvider })
+    : undefined;
+
+  let allowedModelKeys = new Set<string>();
+  const hasAllowlist = (cfg?.agent?.allowedModels?.length ?? 0) > 0;
+  if (cfg && hasAllowlist) {
+    const catalog = await loadModelCatalog({ config: cfg });
+    const allowed = buildAllowedModelSet({
+      cfg,
+      catalog,
+      defaultProvider: aliasDefaultProvider,
+    });
+    allowedModelKeys = allowed.allowedKeys;
+  }
+
+  const seen = new Set<string>();
+  const results: ModelRef[] = [];
+  for (const raw of rawList) {
+    const value = String(raw ?? "").trim();
+    if (!value) continue;
+    const resolved = resolveModelRefFromString({
+      raw: value,
+      defaultProvider: params.primaryProvider,
+      aliasIndex,
+    });
+    if (!resolved) continue;
+    const key = modelKey(resolved.ref.provider, resolved.ref.model);
+    if (key === primaryKey || seen.has(key)) continue;
+    if (allowedModelKeys.size > 0 && !allowedModelKeys.has(key)) continue;
+    results.push(resolved.ref);
+    seen.add(key);
+  }
+
+  return results;
+}
+
+export async function runEmbeddedPiAgent(
+  params: EmbeddedPiRunParams,
+): Promise<EmbeddedPiRunResult> {
+  const primaryProvider =
+    (params.provider ?? DEFAULT_PROVIDER).trim() || DEFAULT_PROVIDER;
+  const primaryModel =
+    (params.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const failoverModels = await resolveFailoverModels({
+    config: params.config,
+    primaryProvider,
+    primaryModel,
+  });
+
+  if (failoverModels.length === 0) {
+    return runEmbeddedPiAgentOnce({
+      ...params,
+      provider: primaryProvider,
+      model: primaryModel,
+    });
+  }
+
+  const attempts = [
+    { provider: primaryProvider, model: primaryModel },
+    ...failoverModels,
+  ];
+  const errors: string[] = [];
+
+  for (let index = 0; index < attempts.length; index++) {
+    const attempt = attempts[index];
+    let streamed = false;
+    const onPartialReply = params.onPartialReply
+      ? (payload: { text?: string; mediaUrls?: string[] }) => {
+          streamed = true;
+          return params.onPartialReply?.(payload);
+        }
+      : undefined;
+    const onToolResult = params.onToolResult
+      ? (payload: { text?: string; mediaUrls?: string[] }) => {
+          streamed = true;
+          return params.onToolResult?.(payload);
+        }
+      : undefined;
+    const onAgentEvent = params.onAgentEvent;
+
+    try {
+      const result = await runEmbeddedPiAgentOnce({
+        ...params,
+        provider: attempt.provider,
+        model: attempt.model,
+        onPartialReply,
+        onToolResult,
+        onAgentEvent,
+      });
+      if (result.meta.aborted || params.abortSignal?.aborted) {
+        return result;
+      }
+      if (
+        result.meta.stopReason === "error" &&
+        !streamed &&
+        index < attempts.length - 1
+      ) {
+        errors.push(
+          `${attempt.provider}/${attempt.model}: ${result.meta.errorMessage ?? "unknown error"}`,
+        );
+        continue;
+      }
+      return result;
+    } catch (err) {
+      if (params.abortSignal?.aborted) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${attempt.provider}/${attempt.model}: ${message}`);
+      if (streamed || index === attempts.length - 1) {
+        throw err;
+      }
+    }
+  }
+
+  throw new Error(
+    errors.length > 0
+      ? `All models failed: ${errors.join("; ")}`
+      : "All models failed.",
+  );
+}
+
 export function queueEmbeddedPiMessage(
   sessionId: string,
   text: string,
@@ -306,7 +457,7 @@ function resolvePromptSkills(
     .filter((skill): skill is Skill => Boolean(skill));
 }
 
-export async function runEmbeddedPiAgent(params: {
+type EmbeddedPiRunParams = {
   sessionId: string;
   sessionKey?: string;
   sessionFile: string;
@@ -339,7 +490,11 @@ export async function runEmbeddedPiAgent(params: {
   extraSystemPrompt?: string;
   ownerNumbers?: string[];
   enforceFinalTag?: boolean;
-}): Promise<EmbeddedPiRunResult> {
+};
+
+async function runEmbeddedPiAgentOnce(
+  params: EmbeddedPiRunParams,
+): Promise<EmbeddedPiRunResult> {
   const sessionLane = resolveSessionLane(
     params.sessionKey?.trim() || params.sessionId,
   );
@@ -546,6 +701,9 @@ export async function runEmbeddedPiAgent(params: {
           | AssistantMessage
           | undefined;
 
+        const stopReason = lastAssistant?.stopReason;
+        const errorMessage = lastAssistant?.errorMessage?.trim() || undefined;
+
         const usage = lastAssistant?.usage;
         const agentMeta: EmbeddedPiAgentMeta = {
           sessionId: sessionIdUsed,
@@ -610,6 +768,8 @@ export async function runEmbeddedPiAgent(params: {
             durationMs: Date.now() - started,
             agentMeta,
             aborted,
+            stopReason,
+            errorMessage,
           },
         };
       } finally {
