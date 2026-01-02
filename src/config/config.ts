@@ -370,10 +370,10 @@ export type ModelsConfig = {
 // Memory Configuration (Qdrant + Embeddings)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type MemoryEmbeddingProvider = "openai" | "ollama" | "local";
+export type MemoryEmbeddingProvider = "openai" | "zai" | "ollama" | "local";
 
 export type MemoryEmbeddingConfig = {
-  /** Embedding provider: "openai" (default), "ollama", or "local" */
+  /** Embedding provider: "openai" (default), "zai", "ollama", or "local" */
   provider?: MemoryEmbeddingProvider;
   /** Model ID for embeddings (e.g., "text-embedding-3-small") */
   model?: string;
@@ -1018,6 +1018,7 @@ const ClawdisSchema = z.object({
           provider: z
             .union([
               z.literal("openai"),
+              z.literal("zai"),
               z.literal("ollama"),
               z.literal("local"),
             ])

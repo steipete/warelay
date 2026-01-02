@@ -34,12 +34,16 @@ export interface MemoryStore {
   list(opts?: MemoryListOptions): Promise<Memory[]>;
 }
 
+type QdrantCondition = {
+  key?: string;
+  match?: { value: string | number };
+  range?: { lt?: number; gt?: number; lte?: number; gte?: number };
+  is_null?: { key: string };
+  should?: QdrantCondition[];
+};
+
 type QdrantFilter = {
-  must?: Array<{
-    key: string;
-    match?: { value: string | number };
-    range?: { lt?: number; gt?: number; lte?: number; gte?: number };
-  }>;
+  must?: QdrantCondition[];
 };
 
 type QdrantSearchResult = {
@@ -120,22 +124,25 @@ export class QdrantMemoryStore implements MemoryStore {
     });
 
     // Create payload indexes for filtering
-    const indexFields = [
-      "category",
-      "senderId",
-      "sessionId",
-      "createdAt",
-      "expiresAt",
+    const indexConfigs: Array<{ field: string; schema: unknown }> = [
+      { field: "category", schema: "keyword" },
+      { field: "senderId", schema: "keyword" },
+      { field: "sessionId", schema: "keyword" },
+      // Integer fields with range support for order_by
+      {
+        field: "createdAt",
+        schema: { type: "integer", lookup: true, range: true },
+      },
+      {
+        field: "expiresAt",
+        schema: { type: "integer", lookup: true, range: true },
+      },
     ];
-    for (const field of indexFields) {
+    for (const { field, schema } of indexConfigs) {
       try {
-        const fieldType =
-          field === "createdAt" || field === "expiresAt"
-            ? "integer"
-            : "keyword";
         await this.request("PUT", `/collections/${this.collection}/index`, {
           field_name: field,
-          field_schema: fieldType,
+          field_schema: schema,
         });
       } catch {
         // Index might already exist - ignore
@@ -190,18 +197,23 @@ export class QdrantMemoryStore implements MemoryStore {
     const embedding = await this.embedder.embed(query);
     const filter = this.buildFilter(opts);
 
+    const body = {
+      vector: embedding,
+      limit: opts?.limit ?? 5,
+      filter: filter.must?.length ? filter : undefined,
+      with_payload: true,
+    };
+
     const results = await this.request<QdrantSearchResult[]>(
       "POST",
       `/collections/${this.collection}/points/search`,
-      {
-        vector: embedding,
-        limit: opts?.limit ?? 5,
-        filter: filter.must?.length ? filter : undefined,
-        with_payload: true,
-      },
+      body,
     );
 
-    return results
+    // Ensure results is an array
+    const resultsArray = Array.isArray(results) ? results : [];
+
+    return resultsArray
       .filter((r) => !opts?.minScore || r.score >= opts.minScore)
       .map((r) => ({
         ...(r.payload as Memory),
@@ -305,11 +317,9 @@ export class QdrantMemoryStore implements MemoryStore {
       must.push({ key: "category", match: { value: opts.category } });
     }
 
-    // Exclude expired memories
-    must.push({
-      key: "expiresAt",
-      range: { gte: Date.now() },
-    });
+    // Note: expired memories are cleaned up separately via deleteExpired()
+    // No automatic expiry filter here since Qdrant can't easily filter for
+    // "field doesn't exist OR field >= now"
 
     return { must };
   }

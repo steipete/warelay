@@ -1,9 +1,9 @@
 /**
  * Embedding client for generating vector representations of text.
- * Supports OpenAI and Ollama providers.
+ * Supports OpenAI, Z.AI, and Ollama providers.
  */
 
-import type { MemoryEmbeddingConfig } from "../config/config.js";
+import { loadConfig, type MemoryEmbeddingConfig } from "../config/config.js";
 
 /** Interface for embedding clients */
 export interface EmbeddingClient {
@@ -64,6 +64,74 @@ class OpenAIEmbeddingClient implements EmbeddingClient {
       const errorText = await response.text();
       throw new Error(
         `OpenAI embedding failed (${response.status}): ${errorText}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      data: Array<{ embedding: number[]; index: number }>;
+    };
+
+    // Sort by index to maintain order
+    const sorted = data.data.sort((a, b) => a.index - b.index);
+    return sorted.map((item) => item.embedding);
+  }
+}
+
+/** Z.AI embedding client - uses OpenAI-compatible API with Z.AI credentials */
+class ZAIEmbeddingClient implements EmbeddingClient {
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly dims: number;
+  private readonly baseUrl: string;
+
+  constructor(config: MemoryEmbeddingConfig) {
+    // Get Z.AI credentials from models config if not provided directly
+    const fullConfig = loadConfig();
+    const zaiProvider = fullConfig.models?.providers?.zai;
+
+    this.apiKey = config.apiKey ?? zaiProvider?.apiKey ?? "";
+    this.model = config.model ?? "text-embedding-3-small";
+    this.dims = config.dimensions ?? 1536;
+    // Z.AI OpenAI-compatible endpoint
+    this.baseUrl =
+      config.baseUrl ?? "https://api.z.ai/api/openai/v1";
+
+    if (!this.apiKey) {
+      throw new Error(
+        "Z.AI API key required: set memory.embedding.apiKey or configure models.providers.zai",
+      );
+    }
+  }
+
+  dimensions(): number {
+    return this.dims;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const result = await this.embedBatch([text]);
+    return result[0] ?? [];
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return [];
+
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        input: texts,
+        dimensions: this.dims,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Z.AI embedding failed (${response.status}): ${errorText}`,
       );
     }
 
@@ -138,12 +206,15 @@ export function createEmbeddingClient(
   switch (provider) {
     case "openai":
       return new OpenAIEmbeddingClient(config);
+    case "zai":
+      return new ZAIEmbeddingClient(config);
     case "ollama":
       return new OllamaEmbeddingClient(config);
     case "local":
-      // Local provider uses same interface as Ollama
-      return new OllamaEmbeddingClient({
+      // Local provider uses OpenAI-compatible API (for TEI, sentence-transformers server, etc.)
+      return new OpenAIEmbeddingClient({
         ...config,
+        apiKey: config.apiKey ?? "local", // API key not needed for local server
         baseUrl: config.baseUrl ?? "http://localhost:8080",
       });
     default:
