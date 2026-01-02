@@ -512,8 +512,27 @@ export async function getReplyFromConfig(
   sessionCtx.Body = queueCleaned;
   sessionCtx.BodyStripped = queueCleaned;
 
+  const resolveGroupRequireMention = () => {
+    const surface = groupResolution?.surface ?? ctx.Surface?.trim().toLowerCase();
+    if (surface === "telegram") {
+      const groupId = groupResolution?.id ?? ctx.From?.replace(/^group:/, "");
+      if (groupId) {
+        const groupConfig = cfg.telegram?.groups?.[groupId];
+        if (typeof groupConfig?.requireMention === "boolean") {
+          return groupConfig.requireMention;
+        }
+      }
+      const groupDefault = cfg.telegram?.groups?._default?.requireMention;
+      if (typeof groupDefault === "boolean") return groupDefault;
+      if (typeof cfg.telegram?.requireMention === "boolean") {
+        return cfg.telegram.requireMention;
+      }
+    }
+    return cfg.routing?.groupChat?.requireMention;
+  };
+
   const defaultGroupActivation = () => {
-    const requireMention = cfg.routing?.groupChat?.requireMention;
+    const requireMention = resolveGroupRequireMention();
     return requireMention === false ? "always" : "mention";
   };
 
@@ -954,6 +973,10 @@ export async function getReplyFromConfig(
     const webLinked = await webAuthExists();
     const webAuthAgeMs = getWebAuthAgeMs();
     const heartbeatSeconds = resolveHeartbeatSeconds(cfg, undefined);
+    const groupActivation = isGroup
+      ? normalizeGroupActivation(sessionEntry?.groupActivation) ??
+        defaultGroupActivation()
+      : undefined;
     const statusText = buildStatusMessage({
       agent: {
         model,
@@ -966,6 +989,7 @@ export async function getReplyFromConfig(
       sessionKey,
       sessionScope,
       storePath,
+      groupActivation,
       resolvedThink: resolvedThinkLevel,
       resolvedVerbose: resolvedVerboseLevel,
       webLinked,

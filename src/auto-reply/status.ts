@@ -30,6 +30,7 @@ type StatusArgs = {
   sessionKey?: string;
   sessionScope?: SessionScope;
   storePath?: string;
+  groupActivation?: "mention" | "always";
   resolvedThink?: ThinkLevel;
   resolvedVerbose?: VerboseLevel;
   now?: number;
@@ -198,7 +199,7 @@ export function buildStatusMessage(args: StatusArgs): string {
     Boolean(args.sessionKey?.includes(":channel:")) ||
     Boolean(args.sessionKey?.startsWith("group:"));
   const groupActivationLine = isGroupSession
-    ? `Group activation: ${entry?.groupActivation ?? "mention"}`
+    ? `Group activation: ${args.groupActivation ?? entry?.groupActivation ?? "mention"}`
     : undefined;
 
   const contextLine = `Context: ${formatTokens(

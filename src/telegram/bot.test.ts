@@ -1,6 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as replyModule from "../auto-reply/reply.js";
 import { createTelegramBot } from "./bot.js";
+
+const { loadConfig } = vi.hoisted(() => ({
+  loadConfig: vi.fn(() => ({})),
+}));
+vi.mock("../config/config.js", () => ({
+  loadConfig,
+}));
 
 const useSpy = vi.fn();
 const onSpy = vi.fn();
@@ -44,6 +51,10 @@ vi.mock("../auto-reply/reply.js", () => {
 });
 
 describe("createTelegramBot", () => {
+  beforeEach(() => {
+    loadConfig.mockReturnValue({});
+  });
+
   it("installs grammY throttler", () => {
     createTelegramBot({ token: "tok" });
     expect(throttlerSpy).toHaveBeenCalledTimes(1);
@@ -176,5 +187,95 @@ describe("createTelegramBot", () => {
     for (const call of sendMessageSpy.mock.calls) {
       expect(call[2]?.reply_to_message_id).toBeUndefined();
     }
+  });
+
+  it("skips group messages without mention when requireMention is enabled", async () => {
+    onSpy.mockReset();
+    const replySpy = replyModule.__replySpy as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    replySpy.mockReset();
+    loadConfig.mockReturnValue({
+      telegram: { requireMention: true },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const handler = onSpy.mock.calls[0][1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await handler({
+      message: {
+        chat: { id: 123, type: "group", title: "Dev Chat" },
+        text: "hello",
+        date: 1736380800,
+      },
+      me: { username: "clawdis_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).not.toHaveBeenCalled();
+  });
+
+  it("allows per-group requireMention override", async () => {
+    onSpy.mockReset();
+    const replySpy = replyModule.__replySpy as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    replySpy.mockReset();
+    loadConfig.mockReturnValue({
+      telegram: {
+        requireMention: true,
+        groups: { "123": { requireMention: false } },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const handler = onSpy.mock.calls[0][1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await handler({
+      message: {
+        chat: { id: 123, type: "group", title: "Dev Chat" },
+        text: "hello",
+        date: 1736380800,
+      },
+      me: { username: "clawdis_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors groups._default when no explicit group override exists", async () => {
+    onSpy.mockReset();
+    const replySpy = replyModule.__replySpy as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    replySpy.mockReset();
+    loadConfig.mockReturnValue({
+      telegram: {
+        requireMention: true,
+        groups: { _default: { requireMention: false } },
+      },
+    });
+
+    createTelegramBot({ token: "tok" });
+    const handler = onSpy.mock.calls[0][1] as (
+      ctx: Record<string, unknown>,
+    ) => Promise<void>;
+
+    await handler({
+      message: {
+        chat: { id: 456, type: "group", title: "Ops" },
+        text: "hello",
+        date: 1736380800,
+      },
+      me: { username: "clawdis_bot" },
+      getFile: async () => ({ download: async () => new Uint8Array() }),
+    });
+
+    expect(replySpy).toHaveBeenCalledTimes(1);
   });
 });

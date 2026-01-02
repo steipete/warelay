@@ -154,6 +154,10 @@ Set `telegram.enabled: false` to disable automatic startup.
     enabled: true,
     botToken: "your-bot-token",
     requireMention: true,
+    groups: {
+      _default: { requireMention: true },
+      "123456789": { requireMention: false } // group chat id
+    },
     allowFrom: ["123456789"],
     mediaMaxMb: 5,
     proxy: "socks5://localhost:9050",
@@ -163,6 +167,7 @@ Set `telegram.enabled: false` to disable automatic startup.
   }
 }
 ```
+Mention gating precedence (most specific wins): `telegram.groups.<chatId>.requireMention` → `telegram.groups._default.requireMention` → `telegram.requireMention` → default `true`.
 
 ### `discord` (bot transport)
 

@@ -34,6 +34,7 @@ Group messages require a mention unless overridden per group.
 Notes:
 - `mentionPatterns` are case-insensitive regexes.
 - Surfaces that provide explicit mentions still pass; patterns are a fallback.
+- Telegram can override mention gating per chat via `telegram.groups.<chatId>.requireMention` and set group defaults with `telegram.groups._default`.
 
 ## Activation (owner-only)
 Group owners can toggle per-group activation:

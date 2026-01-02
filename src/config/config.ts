@@ -161,6 +161,12 @@ export type TelegramConfig = {
   /** Path to file containing bot token (for secret managers like agenix) */
   tokenFile?: string;
   requireMention?: boolean;
+  groups?: Record<
+    string,
+    {
+      requireMention?: boolean;
+    }
+  >;
   allowFrom?: Array<string | number>;
   mediaMaxMb?: number;
   proxy?: string;
@@ -938,6 +944,16 @@ const ClawdisSchema = z.object({
       botToken: z.string().optional(),
       tokenFile: z.string().optional(),
       requireMention: z.boolean().optional(),
+      groups: z
+        .record(
+          z.string(),
+          z
+            .object({
+              requireMention: z.boolean().optional(),
+            })
+            .optional(),
+        )
+        .optional(),
       allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
       mediaMaxMb: z.number().positive().optional(),
       proxy: z.string().optional(),
