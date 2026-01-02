@@ -189,7 +189,8 @@ public final class ClawdisChatViewModel {
         let decoded = raw.compactMap { item in
             (try? ChatPayloadDecoding.decode(item, as: ClawdisChatMessage.self))
         }
-        return Self.dedupeMessages(decoded)
+        let sanitized = decoded.map { Self.sanitizeAssistantMessage($0) }
+        return Self.dedupeMessages(sanitized)
     }
 
     private static func dedupeMessages(_ messages: [ClawdisChatMessage]) -> [ClawdisChatMessage] {
@@ -420,7 +421,8 @@ public final class ClawdisChatViewModel {
         switch evt.stream {
         case "assistant":
             if let text = evt.data["text"]?.value as? String {
-                self.streamingAssistantText = text
+                let sanitized = Self.stripAssistantThinking(from: text)
+                self.streamingAssistantText = sanitized.isEmpty ? nil : sanitized
             }
         case "tool":
             guard let phase = evt.data["phase"]?.value as? String else { return }
@@ -440,6 +442,95 @@ public final class ClawdisChatViewModel {
         default:
             break
         }
+    }
+
+    private static func sanitizeAssistantMessage(_ message: ClawdisChatMessage) -> ClawdisChatMessage {
+        guard message.role.lowercased() == "assistant" else { return message }
+        let sanitizedContent = message.content.map { content -> ClawdisChatMessageContent in
+            let kind = (content.type ?? "text").lowercased()
+            guard kind == "text" || kind.isEmpty, let text = content.text else { return content }
+            let sanitized = Self.stripAssistantThinking(from: text)
+            guard sanitized != text else { return content }
+            return ClawdisChatMessageContent(
+                type: content.type,
+                text: sanitized,
+                thinking: content.thinking,
+                thinkingSignature: content.thinkingSignature,
+                mimeType: content.mimeType,
+                fileName: content.fileName,
+                content: content.content,
+                id: content.id,
+                name: content.name,
+                arguments: content.arguments)
+        }
+        guard sanitizedContent != message.content else { return message }
+        return ClawdisChatMessage(
+            id: message.id,
+            role: message.role,
+            content: sanitizedContent,
+            timestamp: message.timestamp,
+            toolCallId: message.toolCallId,
+            toolName: message.toolName,
+            usage: message.usage,
+            stopReason: message.stopReason)
+    }
+
+    private static func stripAssistantThinking(from text: String) -> String {
+        guard text.contains("<") else { return text }
+        let original = text
+        var result = text
+        result = Self.removeTagBlocks(tag: "think", from: result)
+        result = Self.stripStandaloneTags(tag: "think", from: result)
+        result = Self.stripStandaloneTags(tag: "final", from: result)
+        guard result != original else { return text }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func removeTagBlocks(tag: String, from text: String) -> String {
+        var result = text
+        let openToken = "<\(tag)"
+        let closeToken = "</\(tag)>"
+        while let openRange = result.range(
+            of: openToken,
+            options: [.caseInsensitive, .diacriticInsensitive])
+        {
+            guard let tagEnd = result.range(of: ">", range: openRange.upperBound..<result.endIndex) else {
+                result.removeSubrange(openRange.lowerBound..<result.endIndex)
+                break
+            }
+            if let closeRange = result.range(
+                of: closeToken,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: tagEnd.upperBound..<result.endIndex)
+            {
+                result.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
+            } else {
+                result.removeSubrange(openRange.lowerBound..<result.endIndex)
+                break
+            }
+        }
+        return result
+    }
+
+    private static func stripStandaloneTags(tag: String, from text: String) -> String {
+        var result = text
+        let openToken = "<\(tag)"
+        let closeToken = "</\(tag)>"
+        while let openRange = result.range(
+            of: openToken,
+            options: [.caseInsensitive, .diacriticInsensitive])
+        {
+            guard let tagEnd = result.range(of: ">", range: openRange.upperBound..<result.endIndex) else {
+                result.removeSubrange(openRange.lowerBound..<result.endIndex)
+                break
+            }
+            result.removeSubrange(openRange.lowerBound..<tagEnd.upperBound)
+        }
+        result = result.replacingOccurrences(
+            of: closeToken,
+            with: "",
+            options: [.caseInsensitive, .diacriticInsensitive])
+        return result
     }
 
     private func refreshHistoryAfterRun() async {

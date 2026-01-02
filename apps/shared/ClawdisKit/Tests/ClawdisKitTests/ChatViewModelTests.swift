@@ -211,6 +211,54 @@ private extension TestChatTransportState {
         #expect(await MainActor.run { vm.pendingToolCalls.isEmpty })
     }
 
+    @Test func stripsThinkingFromAssistantText() async throws {
+        let sessionId = "sess-main"
+        let history = ClawdisChatHistoryPayload(
+            sessionKey: "main",
+            sessionId: sessionId,
+            messages: [
+                AnyCodable([
+                    "role": "assistant",
+                    "content": [
+                        ["type": "text", "text": "<think>internal</think>\n\n<final>Hello there</final>"],
+                    ],
+                    "timestamp": Date().timeIntervalSince1970 * 1000,
+                ]),
+            ],
+            thinkingLevel: "off")
+
+        let transport = TestChatTransport(historyResponses: [history])
+        let vm = await MainActor.run { ClawdisChatViewModel(sessionKey: "main", transport: transport) }
+
+        await MainActor.run { vm.load() }
+        try await waitUntil("history loaded") { await MainActor.run { !vm.messages.isEmpty } }
+
+        let historyText = await MainActor.run { vm.messages.first?.content.first?.text }
+        #expect(historyText == "Hello there")
+
+        transport.emit(
+            .agent(
+                ClawdisAgentEventPayload(
+                    runId: sessionId,
+                    seq: 1,
+                    stream: "assistant",
+                    ts: Int(Date().timeIntervalSince1970 * 1000),
+                    data: ["text": AnyCodable("<think>hidden")])))
+
+        try await waitUntil("streaming hidden") { await MainActor.run { vm.streamingAssistantText == nil } }
+
+        transport.emit(
+            .agent(
+                ClawdisAgentEventPayload(
+                    runId: sessionId,
+                    seq: 2,
+                    stream: "assistant",
+                    ts: Int(Date().timeIntervalSince1970 * 1000),
+                    data: ["text": AnyCodable("<think>hidden</think>\n\n<final>Visible</final>")])))
+
+        try await waitUntil("streaming visible") { await MainActor.run { vm.streamingAssistantText == "Visible" } }
+    }
+
     @Test func clearsStreamingOnExternalFinalEvent() async throws {
         let sessionId = "sess-main"
         let history = ClawdisChatHistoryPayload(
