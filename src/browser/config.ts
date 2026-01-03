@@ -80,16 +80,17 @@ function parseHttpUrl(raw: string, label: string) {
 
 /**
  * Ensure the default "clawd" profile exists in the profiles map.
- * Auto-creates it with the first port and default color if missing.
+ * Auto-creates it with the legacy CDP port (from browser.cdpUrl) or first port if missing.
  */
 function ensureDefaultProfile(
   profiles: Record<string, BrowserProfileConfig> | undefined,
   defaultColor: string,
+  legacyCdpPort?: number,
 ): Record<string, BrowserProfileConfig> {
   const result = { ...profiles };
   if (!result[DEFAULT_CLAWD_BROWSER_PROFILE_NAME]) {
     result[DEFAULT_CLAWD_BROWSER_PROFILE_NAME] = {
-      cdpPort: CDP_PORT_RANGE_START,
+      cdpPort: legacyCdpPort ?? CDP_PORT_RANGE_START,
       color: defaultColor,
     };
   }
@@ -140,7 +141,13 @@ export function resolveBrowserConfig(
 
   const defaultProfile =
     cfg?.defaultProfile ?? DEFAULT_CLAWD_BROWSER_PROFILE_NAME;
-  const profiles = ensureDefaultProfile(cfg?.profiles, defaultColor);
+  // Use legacy cdpUrl port for backward compatibility when no profiles configured
+  const legacyCdpPort = rawCdpUrl ? cdpInfo.port : undefined;
+  const profiles = ensureDefaultProfile(
+    cfg?.profiles,
+    defaultColor,
+    legacyCdpPort,
+  );
 
   return {
     enabled,

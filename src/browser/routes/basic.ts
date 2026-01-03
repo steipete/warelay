@@ -139,39 +139,45 @@ export function registerBrowserBasicRoutes(
 
     try {
       const cfg = loadConfig();
-      const profiles = cfg.browser?.profiles ?? {};
+      // Use resolved profiles which includes implicit default (clawd at 18800)
+      const state = ctx.state();
+      const resolvedProfiles = state.resolved.profiles;
 
-      // Check if profile already exists
-      if (name in profiles) {
+      // Check if profile already exists (in resolved, not just raw config)
+      if (name in resolvedProfiles) {
         return jsonError(res, 409, `profile "${name}" already exists`);
       }
 
-      // Allocate port and color
-      const usedPorts = getUsedPorts(profiles);
+      // Allocate port using resolved profiles to avoid collision with implicit default
+      const usedPorts = getUsedPorts(resolvedProfiles);
       const cdpPort = allocateCdpPort(usedPorts);
       if (cdpPort === null) {
         return jsonError(res, 507, "no available CDP ports in range");
       }
 
-      const usedColors = getUsedColors(profiles);
+      const usedColors = getUsedColors(resolvedProfiles);
       const profileColor =
         color && /^#[0-9A-Fa-f]{6}$/.test(color)
           ? color
           : allocateColor(usedColors);
 
-      // Update config
+      // Update config file
+      const rawProfiles = cfg.browser?.profiles ?? {};
       const nextConfig: ClawdisConfig = {
         ...cfg,
         browser: {
           ...cfg.browser,
           profiles: {
-            ...profiles,
+            ...rawProfiles,
             [name]: { cdpPort, color: profileColor },
           },
         },
       };
 
       await writeConfigFile(nextConfig);
+
+      // Update runtime state so new profile is immediately visible
+      state.resolved.profiles[name] = { cdpPort, color: profileColor };
 
       res.json({
         ok: true,
@@ -240,8 +246,9 @@ export function registerBrowserBasicRoutes(
 
       await writeConfigFile(nextConfig);
 
-      // Clear runtime state
+      // Clear runtime state (both resolved config and runtime map)
       const state = ctx.state();
+      delete state.resolved.profiles[name];
       state.profiles.delete(name);
 
       res.json({

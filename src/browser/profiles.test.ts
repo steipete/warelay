@@ -111,6 +111,46 @@ describe("getUsedPorts", () => {
   });
 });
 
+describe("port collision prevention", () => {
+  it("raw config vs resolved config - shows the data source difference", async () => {
+    // This demonstrates WHY the route handler must use resolved config
+    const { resolveBrowserConfig } = await import("./config.js");
+
+    // Fresh config with no profiles defined (like a new install)
+    const rawConfigProfiles = undefined;
+    const usedFromRaw = getUsedPorts(rawConfigProfiles);
+
+    // Raw config shows empty - no ports used
+    expect(usedFromRaw.size).toBe(0);
+
+    // But resolved config has implicit clawd at 18800
+    const resolved = resolveBrowserConfig({});
+    const usedFromResolved = getUsedPorts(resolved.profiles);
+    expect(usedFromResolved.has(CDP_PORT_RANGE_START)).toBe(true);
+  });
+
+  it("create-profile must use resolved config to avoid port collision", async () => {
+    // The route handler must use state.resolved.profiles, not raw config
+    const { resolveBrowserConfig } = await import("./config.js");
+
+    // Simulate what happens with raw config (empty) vs resolved config
+    const rawConfig = { browser: {} }; // Fresh config, no profiles
+    const buggyUsedPorts = getUsedPorts(rawConfig.browser?.profiles);
+    const buggyAllocatedPort = allocateCdpPort(buggyUsedPorts);
+
+    // Raw config: first allocation gets 18800
+    expect(buggyAllocatedPort).toBe(CDP_PORT_RANGE_START);
+
+    // Resolved config: includes implicit clawd at 18800
+    const resolved = resolveBrowserConfig(rawConfig.browser);
+    const fixedUsedPorts = getUsedPorts(resolved.profiles);
+    const fixedAllocatedPort = allocateCdpPort(fixedUsedPorts);
+
+    // Resolved: first NEW profile gets 18801, avoiding collision
+    expect(fixedAllocatedPort).toBe(CDP_PORT_RANGE_START + 1);
+  });
+});
+
 describe("color allocation", () => {
   it("allocates first color when none used", () => {
     const usedColors = new Set<string>();
