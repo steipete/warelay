@@ -4,15 +4,15 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { ClawdisConfig } from "../config/config.js";
-import { STATE_DIR_CLAWDIS } from "../config/config.js";
-import { DEFAULT_CLAWD_BROWSER_COLOR } from "../browser/constants.js";
-import type { ResolvedBrowserConfig } from "../browser/config.js";
 import {
   type BrowserBridge,
   startBrowserBridgeServer,
   stopBrowserBridgeServer,
 } from "../browser/bridge-server.js";
+import type { ResolvedBrowserConfig } from "../browser/config.js";
+import { DEFAULT_CLAWD_BROWSER_COLOR } from "../browser/constants.js";
+import type { ClawdisConfig } from "../config/config.js";
+import { STATE_DIR_CLAWDIS } from "../config/config.js";
 import { defaultRuntime } from "../runtime.js";
 import { resolveUserPath } from "../utils.js";
 import {
@@ -357,10 +357,9 @@ function execDocker(args: string[], opts?: { allowFailure?: boolean }) {
 }
 
 async function readDockerPort(containerName: string, port: number) {
-  const result = await execDocker(
-    ["port", containerName, `${port}/tcp`],
-    { allowFailure: true },
-  );
+  const result = await execDocker(["port", containerName, `${port}/tcp`], {
+    allowFailure: true,
+  });
   if (result.code !== 0) return null;
   const line = result.stdout.trim().split(/\r?\n/)[0] ?? "";
   const match = line.match(/:(\d+)\s*$/);
@@ -552,22 +551,17 @@ async function ensureSandboxBrowser(params: {
     for (const entry of params.cfg.docker.tmpfs) {
       args.push("--tmpfs", entry);
     }
-    if (params.cfg.docker.network) args.push("--network", params.cfg.docker.network);
+    if (params.cfg.docker.network)
+      args.push("--network", params.cfg.docker.network);
     if (params.cfg.docker.user) args.push("--user", params.cfg.docker.user);
     for (const cap of params.cfg.docker.capDrop) {
       args.push("--cap-drop", cap);
     }
     args.push("--security-opt", "no-new-privileges");
     args.push("-v", `${params.workspaceDir}:${params.cfg.docker.workdir}`);
-    args.push(
-      "-p",
-      `127.0.0.1::${params.cfg.browser.cdpPort}`,
-    );
+    args.push("-p", `127.0.0.1::${params.cfg.browser.cdpPort}`);
     if (params.cfg.browser.enableNoVnc && !params.cfg.browser.headless) {
-      args.push(
-        "-p",
-        `127.0.0.1::${params.cfg.browser.noVncPort}`,
-      );
+      args.push("-p", `127.0.0.1::${params.cfg.browser.noVncPort}`);
     }
     args.push(
       "-e",
@@ -579,14 +573,8 @@ async function ensureSandboxBrowser(params: {
         params.cfg.browser.enableNoVnc ? "1" : "0"
       }`,
     );
-    args.push(
-      "-e",
-      `CLAWDIS_BROWSER_CDP_PORT=${params.cfg.browser.cdpPort}`,
-    );
-    args.push(
-      "-e",
-      `CLAWDIS_BROWSER_VNC_PORT=${params.cfg.browser.vncPort}`,
-    );
+    args.push("-e", `CLAWDIS_BROWSER_CDP_PORT=${params.cfg.browser.cdpPort}`);
+    args.push("-e", `CLAWDIS_BROWSER_VNC_PORT=${params.cfg.browser.vncPort}`);
     args.push(
       "-e",
       `CLAWDIS_BROWSER_NOVNC_PORT=${params.cfg.browser.noVncPort}`,
@@ -603,14 +591,13 @@ async function ensureSandboxBrowser(params: {
     params.cfg.browser.cdpPort,
   );
   if (!mappedCdp) {
-    throw new Error(
-      `Failed to resolve CDP port mapping for ${containerName}.`,
-    );
+    throw new Error(`Failed to resolve CDP port mapping for ${containerName}.`);
   }
 
-  const mappedNoVnc = params.cfg.browser.enableNoVnc && !params.cfg.browser.headless
-    ? await readDockerPort(containerName, params.cfg.browser.noVncPort)
-    : null;
+  const mappedNoVnc =
+    params.cfg.browser.enableNoVnc && !params.cfg.browser.headless
+      ? await readDockerPort(containerName, params.cfg.browser.noVncPort)
+      : null;
 
   const existing = BROWSER_BRIDGES.get(params.sessionKey);
   const shouldReuse =
@@ -618,18 +605,23 @@ async function ensureSandboxBrowser(params: {
     existing.containerName === containerName &&
     existing.bridge.state.resolved.cdpPort === mappedCdp;
   if (existing && !shouldReuse) {
-    await stopBrowserBridgeServer(existing.bridge.server).catch(() => undefined);
+    await stopBrowserBridgeServer(existing.bridge.server).catch(
+      () => undefined,
+    );
     BROWSER_BRIDGES.delete(params.sessionKey);
   }
-  const bridge = shouldReuse
-    ? existing!.bridge
-    : await startBrowserBridgeServer({
-        resolved: buildSandboxBrowserResolvedConfig({
-          controlPort: 0,
-          cdpPort: mappedCdp,
-          headless: params.cfg.browser.headless,
-        }),
-      });
+  let bridge: BrowserBridge;
+  if (shouldReuse && existing) {
+    bridge = existing.bridge;
+  } else {
+    bridge = await startBrowserBridgeServer({
+      resolved: buildSandboxBrowserResolvedConfig({
+        controlPort: 0,
+        cdpPort: mappedCdp,
+        headless: params.cfg.browser.headless,
+      }),
+    });
+  }
   if (!shouldReuse) {
     BROWSER_BRIDGES.set(params.sessionKey, { bridge, containerName });
   }
@@ -646,7 +638,9 @@ async function ensureSandboxBrowser(params: {
   });
 
   const noVncUrl =
-    mappedNoVnc && params.cfg.browser.enableNoVnc && !params.cfg.browser.headless
+    mappedNoVnc &&
+    params.cfg.browser.enableNoVnc &&
+    !params.cfg.browser.headless
       ? `http://127.0.0.1:${mappedNoVnc}/vnc.html?autoconnect=1&resize=remote`
       : undefined;
 

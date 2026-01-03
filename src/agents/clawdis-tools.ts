@@ -575,7 +575,9 @@ const BrowserToolSchema = Type.Union([
   }),
 ]);
 
-function createBrowserTool(opts?: { defaultControlUrl?: string }): AnyAgentTool {
+function createBrowserTool(opts?: {
+  defaultControlUrl?: string;
+}): AnyAgentTool {
   return {
     label: "Browser",
     name: "browser",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { SandboxContext } from "./sandbox.js";
 import { buildEmbeddedSandboxInfo } from "./pi-embedded-runner.js";
+import type { SandboxContext } from "./sandbox.js";
 
 describe("buildEmbeddedSandboxInfo", () => {
   it("returns undefined when sandbox is missing", () => {
