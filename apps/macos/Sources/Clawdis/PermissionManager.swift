@@ -140,12 +140,13 @@ enum PermissionManager {
     private static func ensureLocation(interactive: Bool) async -> Bool {
         let status = CLLocationManager.authorizationStatus()
         switch status {
-        case .authorizedAlways, .authorizedWhenInUse:
+        // Note: macOS only supports authorizedAlways, not authorizedWhenInUse (iOS only)
+        case .authorizedAlways:
             return true
         case .notDetermined:
             guard interactive else { return false }
             let updated = await LocationPermissionRequester.shared.request(always: false)
-            return updated == .authorizedAlways || updated == .authorizedWhenInUse
+            return updated == .authorizedAlways
         case .denied, .restricted:
             if interactive {
                 LocationPermissionHelper.openSettings()
@@ -200,7 +201,8 @@ enum PermissionManager {
                 results[cap] = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
             case .location:
                 let status = CLLocationManager.authorizationStatus()
-                results[cap] = status == .authorizedAlways || status == .authorizedWhenInUse
+                // Note: macOS only supports authorizedAlways
+                results[cap] = status == .authorizedAlways
             }
         }
         return results

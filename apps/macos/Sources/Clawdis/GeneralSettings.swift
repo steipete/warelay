@@ -151,20 +151,12 @@ struct GeneralSettings: View {
     private func requestLocationAuthorization(mode: ClawdisLocationMode) async -> Bool {
         guard mode != .off else { return true }
         let status = CLLocationManager.authorizationStatus()
-        if status == .authorizedAlways || status == .authorizedWhenInUse {
-            if mode == .always && status != .authorizedAlways {
-                let updated = await LocationPermissionRequester.shared.request(always: true)
-                return updated == .authorizedAlways || updated == .authorizedWhenInUse
-            }
+        // Note: macOS only supports authorizedAlways, not authorizedWhenInUse (iOS only)
+        if status == .authorizedAlways {
             return true
         }
         let updated = await LocationPermissionRequester.shared.request(always: mode == .always)
-        switch updated {
-        case .authorizedAlways, .authorizedWhenInUse:
-            return true
-        default:
-            return false
-        }
+        return updated == .authorizedAlways
     }
 
     private var connectionSection: some View {
