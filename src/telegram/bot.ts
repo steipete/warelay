@@ -126,6 +126,11 @@ export function createTelegramBot(opts: TelegramBotOptions) {
         }
       }
 
+      // React to acknowledge message receipt
+      ctx.react("✍️").catch((err) => {
+        logVerbose(`telegram react failed for chat ${chatId}: ${String(err)}`);
+      });
+
       const media = await resolveMedia(
         ctx,
         mediaMaxBytes,
